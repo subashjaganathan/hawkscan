@@ -14,6 +14,7 @@ from .binprofile import BinProfileAnalyzer
 from .script_analyzer import ScriptAnalyzer
 from .archive_analyzer import ArchiveAnalyzer
 from .email_analyzer import EmailAnalyzer
+from .pcap_analyzer import PcapAnalyzer
 from .android_analyzer import AndroidAnalyzer
 from .carver import Carver
 from .yara_analyzer import YaraAnalyzer
@@ -35,6 +36,7 @@ ALL_ANALYZERS: list[type[Analyzer]] = [
     ScriptAnalyzer,
     ArchiveAnalyzer,
     EmailAnalyzer,
+    PcapAnalyzer,
     AndroidAnalyzer,
     Carver,
     YaraAnalyzer,

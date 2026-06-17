@@ -58,6 +58,29 @@ def test_ioc_whitelist():
     assert not _is_whitelisted("http://evil-c2-domain.tk/payload")
 
 
+def test_pcap_extracts_dns_and_flags_suspicious_tld(tmp_path):
+    import struct
+    from hawkscan.analyzers.pcap_analyzer import PcapAnalyzer
+
+    dns = struct.pack(">HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
+    for lbl in "evil-c2.ru".split("."):
+        dns += bytes([len(lbl)]) + lbl.encode()
+    dns += b"\x00" + struct.pack(">HH", 1, 1)
+    udp = struct.pack(">HHHH", 5000, 53, 8 + len(dns), 0) + dns
+    ip = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 20 + len(udp), 1, 0, 64, 17, 0,
+                     bytes([10, 0, 0, 5]), bytes([45, 77, 88, 99]))
+    pkt = b"\xaa" * 6 + b"\xbb" * 6 + b"\x08\x00" + ip + udp
+    gh = b"\xd4\xc3\xb2\xa1" + struct.pack("<HHIIII", 2, 4, 0, 0, 65535, 1)
+    rec = struct.pack("<IIII", 0, 0, len(pkt), len(pkt)) + pkt
+
+    ctx = _ctx(tmp_path, "t.pcap", gh + rec)
+    assert ctx.info.file_type == "pcap"
+    findings = list(PcapAnalyzer().analyze(ctx))
+    titles = [f.title for f in findings]
+    assert any("DNS quer" in t for t in titles)
+    assert any("suspicious-TLD" in t for t in titles)
+
+
 def test_email_phishing_indicators(tmp_path):
     import base64
     from hawkscan.analyzers.email_analyzer import EmailAnalyzer
