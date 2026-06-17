@@ -1,137 +1,165 @@
 # HawkScan
 
-Offline, explainable malware scanner for **any file type on any OS**.
+HawkScan is an offline, explainable malware triage scanner. You point it at any
+file, of any type, on any operating system, and it tells you whether the file
+looks malicious and, more importantly, exactly why.
 
-HawkScan is **not** a VirusTotal clone. It does not upload your files, does not
-aggregate third-party antivirus engines, and works fully offline. Instead it
-*parses* each file, runs structural + heuristic + YARA analysis, and returns a
-**verdict with the evidence behind it** — a weighted, auditable score rather
-than a black-box yes/no.
+It is deliberately different from services like VirusTotal. It does not upload
+your files anywhere, it does not aggregate third party antivirus engines, and
+it works completely offline. Instead it parses the file itself, runs structural,
+heuristic and signature based checks, and returns a weighted, auditable verdict
+that you can defend line by line.
 
-```
-  VERDICT: MALICIOUS   (score 300, confidence high)
+## What it is and is not
 
-  Evidence:
-   [High    ] (script/execution) PowerShell Invoke-Expression
-   [High    ] (yara/execution)   YARA rule match: HawkScan_Suspicious_Download_Exec
-   [Medium  ] (strings/network)  Network download primitive
-   ...
-```
+HawkScan performs static and heuristic analysis. It inspects a file without
+running it.
 
-## Why it's different
+It does:
+- Identify the true file type and compute cryptographic hashes.
+- Parse the structure of common formats (Windows PE, Linux ELF, macOS Mach-O,
+  Office documents, PDF, scripts, archives).
+- Score suspicious traits and known signatures into a clear verdict.
 
-| | VirusTotal | HawkScan |
-|---|---|---|
-| Network | Uploads file to cloud | 100% offline / local |
-| Engine | Aggregates 70+ AV vendors | Own static + heuristic + YARA engine |
-| Output | Vendor vote count | Explainable, weighted evidence per finding |
-| Privacy | File leaves your machine | Nothing leaves your machine |
+It does not:
+- Execute the file or observe its runtime behaviour (no sandbox).
+- Disassemble or decompile code.
+- Guarantee a file is safe. A Clean verdict means no static red flags were
+  found, not that the file is harmless.
 
-## How it works
+This makes it fast, safe to run on any machine, and fully explainable, which is
+exactly what you want for first pass triage.
 
-Each file is hashed and identified by magic bytes, then routed to the relevant
-analyzers. Every analyzer emits **Findings** carrying a severity weight; the
-engine sums those weights into a score and maps it to a verdict band:
+## How to install
 
-`Clean → Low Risk → Suspicious → Likely Malicious → Malicious`
-
-Because the verdict is just the sum of named findings, you can always see
-*why* — and retune the thresholds in one place (`core/findings.py`).
-
-### Analyzers
-- **fileinfo** — hashing (MD5/SHA1/SHA256), type detection, extension/content
-  mismatch (masquerading) detection
-- **entropy** — packing / encryption detection via Shannon entropy
-- **pe** — Windows PE: imports, section entropy, packer sections, signatures *(uses `pefile`)*
-- **elf** — Linux ELF: header facts + persistence/anti-debug heuristics
-- **macho** — macOS Mach-O: header facts + code-signing / persistence heuristics
-- **office** — VBA macros, auto-exec, suspicious APIs *(uses `oletools`)*
-- **pdf** — active-content keywords (JavaScript, OpenAction, Launch, …)
-- **script** — PowerShell/JS/VBS/batch obfuscation + dynamic-eval detection
-- **archive** — ZIP members: double-extension lures, encrypted archives, zip bombs
-- **strings** — format-agnostic IOC + capability extraction (URLs, IPs, APIs)
-- **yara** — rule matching from `rules/` or `--rules` *(uses `yara-python`)*
-
-## Install
-
-The **core engine has zero required dependencies** — it runs on a stock Python
-3.9+ install. Optional libraries unlock deeper analysis and light up
-automatically when present:
+The core engine has no required dependencies and runs on a stock Python 3.9 or
+newer install. Optional libraries unlock deeper analysis and are detected
+automatically when present.
 
 ```bash
-# Core only (works anywhere)
+# Core only
 pip install -e .
 
-# Full power (PE imports, YARA, Office macros)
+# Full analysis (PE imports, YARA matching, Office macro extraction)
 pip install -e ".[full]"
-# or just: pip install pefile yara-python oletools
 ```
 
-If an optional library is missing, the relevant analyzer is **skipped with a
-note** — HawkScan never crashes on a missing dependency.
+If an optional library is missing, the matching analyzer is skipped with a note
+rather than failing the scan.
 
-## Usage
+## How to run it
 
 ```bash
-# Scan one or more files
-hawkscan suspicious.exe invoice.pdf
+# Scan a single file
+hawkscan suspicious.exe
 
-# Scan a directory recursively
+# Scan several files at once
+hawkscan file1.dll invoice.pdf script.ps1
+
+# Scan a folder, including subfolders
 hawkscan -r ./downloads
 
-# JSON output (for pipelines / HawkSuite integration)
-hawkscan --json sample.bin
+# Show only files that are at least suspicious
+hawkscan -r ./downloads --min-verdict suspicious
 
-# Only report files at/above a band
-hawkscan -r ./quarantine --min-verdict suspicious
+# Machine readable output for pipelines
+hawkscan sample.bin --json
 
-# CI / automation: non-zero exit if anything reaches a band
+# Return a non-zero exit code for automation or CI gates
 hawkscan -r ./build --fail-on likely_malicious
 
-# Use your own YARA rules
+# Use an additional directory of YARA rules
 hawkscan --rules ./my_rules sample.bin
 ```
 
-### Updating the community ruleset
-
-HawkScan ships with a handful of built-in YARA rules. To dramatically raise
-real-world coverage, download the community [YARA-Forge](https://yarahq.github.io/)
-ruleset (thousands of rules). They are cached per-user (`~/.hawkscan/rules/`),
-never committed to the repo, and picked up automatically on the next scan:
-
-```bash
-hawkscan --update-rules            # 'core' tier (high-confidence, default)
-hawkscan --update-rules extended   # broader coverage
-hawkscan --update-rules full       # everything (highest FP rate)
-```
-
-Run without installing:
+If you have not installed it as a command yet, you can always run it as a
+module from the project folder:
 
 ```bash
 python -m hawkscan <file>
 ```
 
-## Extending detection
+### Updating the signature set
 
-Drop additional `.yar` files into `hawkscan/rules/` (or point `--rules` at your
-own directory). A rule may set `meta.severity` (`info|low|medium|high|critical`)
-and `meta.category`/`meta.description` to control how it scores and reads.
+HawkScan ships with a small set of built in YARA rules. To raise real world
+coverage, download the community YARA-Forge ruleset (thousands of rules). The
+rules are cached per user and picked up automatically on the next scan.
+
+```bash
+hawkscan --update-rules            # core tier, highest confidence
+hawkscan --update-rules extended   # broader coverage
+hawkscan --update-rules full       # everything, higher false positive rate
+```
+
+## How to read the result
+
+Every scan prints the file identity, a verdict, a score, a confidence level, and
+the evidence behind the verdict.
+
+```
+VERDICT: MALICIOUS   (score 145 (capped from 300), confidence high)
+
+Evidence:
+ [High    ] (script/execution) PowerShell Invoke-Expression
+ [High    ] (yara/execution)   YARA rule match: download and execute cradle
+ [Medium  ] (strings/network)  Network download primitive
+```
+
+- Verdict is the bottom line: Clean, Low Risk, Suspicious, Likely Malicious or
+  Malicious.
+- Score is the total weight of all evidence.
+- Confidence reflects how strong and corroborated the evidence is.
+- Evidence lists each finding with its analyzer, category and reason, so the
+  verdict is never a black box.
+
+## How it works
+
+Each file goes through five stages.
+
+1. Identify. The file is hashed (MD5, SHA1, SHA256) and its true type is
+   detected from magic bytes, not from the extension. A file whose extension
+   disagrees with its real content is flagged as masquerading.
+2. Route. Based on the real type, the file is sent to the relevant analyzers.
+3. Analyze. Each analyzer looks for its own indicators and emits findings. Every
+   finding carries a severity weight (Info, Low, Medium, High, Critical).
+4. Score. The weights are summed. Identical findings are de-duplicated, and no
+   single category can dominate the verdict (the report shows the raw and the
+   capped score for transparency).
+5. Verdict. The capped score maps to a verdict band, and all evidence is shown.
+
+Because the verdict is simply the sum of named findings, you can audit every
+decision and tune the thresholds in one place.
+
+## What it implements
+
+| Analyzer | What it looks for |
+|----------|-------------------|
+| File identity | Hashes, true type, extension versus content mismatch |
+| Entropy | Packing, encryption or compression via Shannon entropy |
+| Strings | Embedded URLs and IPs, download and execution primitives, persistence, ransomware and spyware indicators |
+| PE | Dangerous Windows API imports, packer sections, section entropy, missing signature |
+| ELF | Architecture, ptrace anti debugging, LD_PRELOAD and cron persistence |
+| Mach-O | File type, missing code signature, LaunchAgent and LaunchDaemon persistence |
+| Office | VBA macros, auto execute triggers, shell and download calls inside macros |
+| PDF | JavaScript, OpenAction, Launch actions, embedded files, name obfuscation |
+| Script | Base64 payloads, character code obfuscation, dynamic execution, hidden window flags |
+| Archive | Double extension lures, encrypted archives, decompression bombs, executable members |
+| YARA | Signature matching from the built in and community rule sets |
 
 ## Reducing false positives
 
-- **Allowlist known-good files.** Put SHA-256 hashes (one per line, `#` for
-  comments) in `~/.hawkscan/allowlist.txt`; matching files are reported Clean
-  immediately.
-- **Score capping.** No single category (e.g. many YARA signature hits of one
-  theme) can dominate the verdict; the report shows the raw vs. capped score.
-- **Duplicate evidence is de-duplicated** before scoring.
+- Allowlist known good files by putting their SHA256 hashes (one per line) in
+  `~/.hawkscan/allowlist.txt`. Matching files are reported Clean immediately.
+- Per category score capping prevents one theme of evidence from maxing the
+  verdict on its own.
+- Duplicate evidence is removed before scoring.
 
-## Performance & limits
+## Performance
 
-- Compiled YARA rules are cached on disk (`~/.hawkscan/compiled/`), so large
-  rulesets compile once and load in milliseconds thereafter.
-- Files larger than 256 MiB are hashed/identified but skip deep analysis
-  (override with `--max-size MB`).
+- Compiled YARA rules are cached on disk, so large rule sets compile once and
+  load in milliseconds on later scans.
+- Files larger than 256 MiB are identified but skip deep analysis. Override the
+  limit with `--max-size MB`.
 
 ## Testing
 
@@ -140,18 +168,17 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-CI runs the core test suite on Linux + Windows across Python 3.11–3.13 with no
-optional dependencies, enforcing the "runs on stock Python" contract.
+The test suite runs against the core engine with no optional dependencies, on
+Linux and Windows across Python 3.11 to 3.13, through continuous integration.
 
-## Known limitations
+## Limitations
 
-- No dynamic/sandbox execution — this is a static + heuristic engine, so it
-  cannot see behavior that only appears at runtime (packed/encrypted/fileless).
-- A "Clean" verdict means "no static red flags found," not "guaranteed safe."
-- Signature check detects *embedded* Authenticode only; catalog-signed Windows
-  binaries show as "not signed" (low-severity note, never a malicious verdict).
-- Archives are inspected at the member-listing level; contents are not yet
-  recursively scanned.
+- Static only. It cannot see behaviour that appears only at runtime, such as
+  packed, encrypted or fileless payloads. A sandbox would be required for that.
+- Signature checking covers embedded Authenticode only, so some validly signed
+  Windows binaries are reported as unsigned at low severity.
+- Archives are inspected at the member listing level. Their contents are not yet
+  scanned recursively.
 
 ## License
 
