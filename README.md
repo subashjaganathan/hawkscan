@@ -73,6 +73,9 @@ hawkscan -r ./build --fail-on likely_malicious
 
 # Use an additional directory of YARA rules
 hawkscan --rules ./my_rules sample.bin
+
+# Carve embedded files (hidden PE/ELF/ZIP) out of a carrier
+hawkscan dropper.pdf --extract ./carved
 ```
 
 If you have not installed it as a command yet, you can always run it as a
@@ -149,6 +152,7 @@ decision and tune the thresholds in one place.
 | Archive | Double extension lures, encrypted archives, decompression bombs, executable members |
 | Android | APK and DEX analysis: categorizes requested permissions (high-risk, dangerous) and flags suspicious APIs (SMS fraud, dynamic code loading, accessibility abuse, device-admin, IMEI/IMSI theft, command execution) |
 | Capability | Groups imported APIs into behavioural categories (networking, injection, keylogging, persistence...) and maps them to MITRE ATT&CK techniques. The category inventory is informational; high confidence API combinations (such as the process injection triad) drive the score |
+| Carver | Finds and extracts executables and archives (PE/ELF/ZIP/...) embedded at a non-zero offset inside a carrier file, a common dropper technique. Embedded PEs are sized from their headers so extraction captures the whole payload |
 | YARA | Signature matching from the built in and community rule sets |
 
 The capability and MITRE ATT&CK output gives you a quick behavioural profile of a

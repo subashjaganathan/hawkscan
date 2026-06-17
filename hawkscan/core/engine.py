@@ -97,13 +97,15 @@ def _load_allowlist() -> set[str]:
 
 class Engine:
     def __init__(self, analyzers: list | None = None, rules_dir: Path | None = None,
-                 max_scan_size: int = DEFAULT_MAX_SCAN_SIZE):
+                 max_scan_size: int = DEFAULT_MAX_SCAN_SIZE,
+                 extract_dir: Path | None = None):
         # Imported here to avoid a circular import at module load.
         from ..analyzers import ALL_ANALYZERS
 
         self.analyzer_classes = analyzers if analyzers is not None else ALL_ANALYZERS
         self.rules_dir = rules_dir
         self.max_scan_size = max_scan_size
+        self.extract_dir = extract_dir
         self.allowlist = _load_allowlist()
 
     def scan(self, path: str | Path) -> ScanResult:
@@ -148,6 +150,7 @@ class Engine:
 
         ctx = AnalysisContext(info=info, content=ctx_content)
         ctx.cache["rules_dir"] = self.rules_dir
+        ctx.cache["extract_dir"] = self.extract_dir
 
         # An extension/type mismatch is itself a finding (masquerading).
         if info.ext_mismatch:

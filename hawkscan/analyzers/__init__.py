@@ -12,6 +12,7 @@ from .pdf_analyzer import PDFAnalyzer
 from .script_analyzer import ScriptAnalyzer
 from .archive_analyzer import ArchiveAnalyzer
 from .android_analyzer import AndroidAnalyzer
+from .carver import Carver
 from .yara_analyzer import YaraAnalyzer
 
 # Order matters: StringsAnalyzer populates ctx.cache["strings"], which the
@@ -29,6 +30,7 @@ ALL_ANALYZERS: list[type[Analyzer]] = [
     ScriptAnalyzer,
     ArchiveAnalyzer,
     AndroidAnalyzer,
+    Carver,
     YaraAnalyzer,
 ]
 

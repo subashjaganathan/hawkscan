@@ -58,6 +58,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "Default 256.")
     p.add_argument("--debug", action="store_true",
                    help="Include full analyzer tracebacks in output.")
+    p.add_argument("--extract", metavar="DIR",
+                   help="Carve embedded files (PE/ELF/ZIP/...) into DIR.")
     p.add_argument("-V", "--version", action="version",
                    version=f"HawkScan {__version__}")
     return p
@@ -82,7 +84,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     rules_dir = Path(args.rules) if args.rules else None
-    engine = Engine(rules_dir=rules_dir, max_scan_size=args.max_size * 1024 * 1024)
+    engine = Engine(rules_dir=rules_dir, max_scan_size=args.max_size * 1024 * 1024,
+                    extract_dir=Path(args.extract) if args.extract else None)
 
     files = _gather_files(args.paths, args.recursive)
     if not files:
