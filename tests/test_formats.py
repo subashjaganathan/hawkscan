@@ -56,3 +56,27 @@ def test_ioc_whitelist():
     assert _is_whitelisted("http://schemas.microsoft.com/office")
     assert _is_whitelisted("http://www.w3.org/2000/svg")
     assert not _is_whitelisted("http://evil-c2-domain.tk/payload")
+
+
+def test_email_phishing_indicators(tmp_path):
+    import base64
+    from hawkscan.analyzers.email_analyzer import EmailAnalyzer
+    pe_b64 = base64.b64encode(b"MZ" + b"\x90" * 32).decode()
+    eml = (
+        'From: "Bank" <help@bank.com>\n'
+        "Return-Path: <attacker@evil.ru>\n"
+        "MIME-Version: 1.0\n"
+        "Authentication-Results: mx; spf=fail; dmarc=fail\n"
+        'Content-Type: multipart/mixed; boundary="B"\n\n'
+        "--B\nContent-Type: text/plain\n\nopen it\n"
+        "--B\nContent-Type: application/octet-stream; name=\"doc.pdf.exe\"\n"
+        "Content-Transfer-Encoding: base64\n"
+        'Content-Disposition: attachment; filename="doc.pdf.exe"\n\n'
+        f"{pe_b64}\n--B--\n"
+    ).encode()
+    ctx = _ctx(tmp_path, "p.eml", eml)
+    assert ctx.info.file_type == "email"
+    titles = [f.title for f in EmailAnalyzer().analyze(ctx)]
+    assert any("SPF" in t for t in titles)
+    assert any("Double-extension" in t for t in titles)
+    assert any("Return-Path" in t for t in titles)

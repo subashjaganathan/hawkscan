@@ -138,6 +138,11 @@ def detect_type(head: bytes, extension: str) -> tuple[str, str]:
     # No magic match: distinguish text/script from opaque data.
     if extension in _SCRIPT_EXTS:
         return "script", _SCRIPT_EXTS[extension]
+    # Email messages (RFC 822 / .eml): header-driven, no magic byte.
+    if extension == ".eml" or (b"MIME-Version:" in head and
+                               (b"\nFrom:" in head or head.startswith(b"From:") or
+                                b"\nReceived:" in head)):
+        return "email", "Email message (RFC 822 / EML)"
     if _looks_like_text(head):
         return "text", "Plain text / source"
     return "data", "Unknown binary data"

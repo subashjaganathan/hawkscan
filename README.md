@@ -150,6 +150,7 @@ decision and tune the thresholds in one place.
 | PDF | JavaScript, OpenAction, Launch actions, embedded files, name obfuscation |
 | Script | Base64 payloads, character code obfuscation, dynamic execution, hidden window flags |
 | Archive | Double extension lures, encrypted archives, decompression bombs, executable members |
+| Email | EML/RFC 822 analysis: SPF/DKIM/DMARC failures, From vs Return-Path/Reply-To spoofing, risky and double-extension attachments, attachments that decode to executables |
 | Android | APK and DEX analysis: categorizes requested permissions (high-risk, dangerous) and flags suspicious APIs (SMS fraud, dynamic code loading, accessibility abuse, device-admin, IMEI/IMSI theft, command execution) |
 | Capability | Groups imported APIs into behavioural categories (networking, injection, keylogging, persistence...) and maps them to MITRE ATT&CK techniques. The category inventory is informational; high confidence API combinations (such as the process injection triad) drive the score |
 | RTF | Detects embedded OLE objects, auto-updating objects, and exploit carriers (Equation Editor CVE-2017-11882/0802, OLE2Link CVE-2017-0199, Packager droppers) |

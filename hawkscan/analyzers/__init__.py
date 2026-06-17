@@ -13,6 +13,7 @@ from .rtf_analyzer import RTFAnalyzer
 from .binprofile import BinProfileAnalyzer
 from .script_analyzer import ScriptAnalyzer
 from .archive_analyzer import ArchiveAnalyzer
+from .email_analyzer import EmailAnalyzer
 from .android_analyzer import AndroidAnalyzer
 from .carver import Carver
 from .yara_analyzer import YaraAnalyzer
@@ -33,6 +34,7 @@ ALL_ANALYZERS: list[type[Analyzer]] = [
     RTFAnalyzer,
     ScriptAnalyzer,
     ArchiveAnalyzer,
+    EmailAnalyzer,
     AndroidAnalyzer,
     Carver,
     YaraAnalyzer,
