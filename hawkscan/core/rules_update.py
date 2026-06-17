@@ -1,0 +1,67 @@
+"""Download and update community YARA rules (YARA-Forge).
+
+Downloaded rules live in a per-user cache dir (NOT committed to git) so the
+repository stays small and rules can be refreshed independently of releases.
+The YaraAnalyzer scans this directory in addition to the bundled built-in rules.
+
+Uses only the stdlib (urllib + zipfile) so it works with no extra dependencies.
+"""
+
+from __future__ import annotations
+
+import io
+import sys
+import urllib.request
+import zipfile
+from pathlib import Path
+
+# Per-user cache for downloaded rulesets. Cross-platform via Path.home().
+USER_RULES_DIR = Path.home() / ".hawkscan" / "rules"
+
+# YARA-Forge publishes three package tiers. "core" is the highest-confidence,
+# lowest-false-positive set — the right default for a triage tool.
+_PACKAGES = {
+    "core": "yara-forge-rules-core.zip",
+    "extended": "yara-forge-rules-extended.zip",
+    "full": "yara-forge-rules-full.zip",
+}
+_BASE = "https://github.com/YARAHQ/yara-forge/releases/latest/download/"
+
+
+def _log(msg: str) -> None:
+    print(f"[hawkscan:update-rules] {msg}", file=sys.stderr)
+
+
+def update_rules(package: str = "core", dest: Path | None = None) -> Path:
+    """Download the chosen YARA-Forge package and extract its .yar files.
+
+    Returns the directory the rules were written to. Raises on network/parse
+    failure so the caller can report a clean error.
+    """
+    if package not in _PACKAGES:
+        raise ValueError(f"Unknown package '{package}'. Choose from {list(_PACKAGES)}.")
+
+    dest = Path(dest) if dest else USER_RULES_DIR
+    dest.mkdir(parents=True, exist_ok=True)
+
+    url = _BASE + _PACKAGES[package]
+    _log(f"downloading {package} ruleset from {url}")
+    req = urllib.request.Request(url, headers={"User-Agent": "HawkScan-rule-updater"})
+    with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310 (trusted host)
+        blob = resp.read()
+    _log(f"downloaded {len(blob):,} bytes; extracting")
+
+    written = 0
+    with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+        for name in zf.namelist():
+            if not name.lower().endswith((".yar", ".yara")):
+                continue
+            # Flatten any nested path to a single filename in dest.
+            out = dest / Path(name).name
+            out.write_bytes(zf.read(name))
+            written += 1
+
+    if written == 0:
+        raise RuntimeError("No .yar files found in the downloaded package.")
+    _log(f"wrote {written} rule file(s) to {dest}")
+    return dest
