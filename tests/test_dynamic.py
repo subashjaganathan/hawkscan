@@ -42,3 +42,26 @@ def test_command_mapping():
     assert sandbox._build_command(Path("a.ps1"), "script")[0] == "powershell"
     assert sandbox._build_command(Path("a.py"), "script")[-1].endswith("a.py")
     assert sandbox._build_command(Path("a.txt"), "text") is None
+
+
+def test_method_resolution():
+    # Android always routes to adb; an explicit method passes through.
+    assert sandbox._resolve_method("auto", "apk") == "adb"
+    assert sandbox._resolve_method("monitor", "pe") == "monitor"
+    assert sandbox._resolve_method("frida", "pe") == "frida"
+
+
+def test_tracers_expose_availability():
+    from hawkscan.dynamic import strace_tracer, frida_tracer, adb_tracer
+    # available() must be callable and return a bool without side effects.
+    assert isinstance(strace_tracer.available(), bool)
+    assert isinstance(frida_tracer.available(), bool)
+    assert isinstance(adb_tracer.available(), bool)
+
+
+def test_frida_trace_reports_missing_dependency_cleanly():
+    # With frida absent, trace() returns a note rather than raising.
+    from hawkscan.dynamic import frida_tracer
+    if not frida_tracer.available():
+        out = frida_tracer.trace(["whatever"], timeout=1)
+        assert out["notes"] and "frida" in out["notes"][0].lower()

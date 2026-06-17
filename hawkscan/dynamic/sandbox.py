@@ -41,6 +41,7 @@ _NOTABLE_CHILDREN = ("powershell", "cmd.exe", "cmd ", "wscript", "cscript",
 @dataclass
 class SandboxResult:
     ran: bool = False
+    method: str = ""               # monitor | strace | frida | adb
     skipped_reason: str = ""
     returncode: int | None = None
     timed_out: bool = False
@@ -48,15 +49,21 @@ class SandboxResult:
     child_processes: list[str] = field(default_factory=list)
     files_created: list[str] = field(default_factory=list)
     network: list[str] = field(default_factory=list)
+    api_calls: list[str] = field(default_factory=list)   # frida hooks
+    syscalls: list[str] = field(default_factory=list)     # strace
+    notes: list[str] = field(default_factory=list)
     stdout_tail: str = ""
 
     def to_dict(self) -> dict:
         return {
-            "ran": self.ran, "skipped_reason": self.skipped_reason,
+            "ran": self.ran, "method": self.method,
+            "skipped_reason": self.skipped_reason,
             "returncode": self.returncode, "timed_out": self.timed_out,
             "duration_s": round(self.duration_s, 2),
             "child_processes": self.child_processes,
             "files_created": self.files_created, "network": self.network,
+            "api_calls": self.api_calls, "syscalls": self.syscalls,
+            "notes": self.notes,
         }
 
 
@@ -87,8 +94,25 @@ def _snapshot(d: Path) -> set[str]:
     return {str(p.relative_to(d)) for p in d.rglob("*") if p.is_file()}
 
 
+def _resolve_method(method: str, file_type: str) -> str:
+    """Pick a tracer. 'auto' chooses by file type, platform, and availability."""
+    if method != "auto":
+        return method
+    if file_type in {"apk", "dex"}:
+        return "adb"
+    # On Linux, strace gives rich syscall detail for native/script samples.
+    from . import strace_tracer
+    if sys.platform.startswith("linux") and strace_tracer.available():
+        return "strace"
+    # Frida hooks APIs cross-platform when installed.
+    from . import frida_tracer
+    if frida_tracer.available():
+        return "frida"
+    return "monitor"
+
+
 def run_sample(sample, file_type: str, timeout: int = 20,
-               allow_detonate: bool = False) -> SandboxResult:
+               allow_detonate: bool = False, method: str = "auto") -> SandboxResult:
     """Run `sample` under observation. See module docstring for the safety gate."""
     sample = Path(sample)
     res = SandboxResult()
@@ -98,13 +122,28 @@ def run_sample(sample, file_type: str, timeout: int = 20,
             f"refused: set {SANDBOX_ENV_FLAG}=1 only inside a disposable analysis "
             "VM to enable execution. Never run untrusted samples on a workstation.")
         return res
+    if not allow_detonate:
+        res.skipped_reason = "execution requires explicit --detonate"
+        return res
+
+    res.method = _resolve_method(method, file_type)
+
+    # Android goes straight to ADB (installs the APK on a device/emulator).
+    if res.method == "adb":
+        from . import adb_tracer
+        info = adb_tracer.trace(str(sample), timeout)
+        res.notes = info.get("notes", [])
+        res.network = info.get("network", [])
+        for b in info.get("behaviours", []):
+            res.api_calls.append(f"{b['category']}: {b['detail']}")
+        res.ran = bool(info.get("package")) and not res.notes
+        if not res.ran and not res.notes:
+            res.notes.append("adb run produced no observable behaviour")
+        return res
 
     cmd = _build_command(sample, file_type)
     if cmd is None:
         res.skipped_reason = f"no runner configured for type '{file_type}'"
-        return res
-    if not allow_detonate:
-        res.skipped_reason = "execution requires explicit --detonate"
         return res
 
     workdir = Path(tempfile.mkdtemp(prefix="hawkscan_sbx_"))
@@ -116,6 +155,29 @@ def run_sample(sample, file_type: str, timeout: int = 20,
             cmd[-1] = str(local)
         else:
             cmd = [c if c != str(sample) else str(local) for c in cmd]
+
+        # strace / frida tracers take over here when selected.
+        if res.method == "strace":
+            from . import strace_tracer
+            info = strace_tracer.trace(cmd, str(workdir), timeout)
+            res.ran = True
+            res.syscalls = info["syscalls"]
+            res.network = info["network"]
+            res.child_processes = info["processes"]
+            res.files_created = info["files"]
+            res.timed_out = info["timed_out"]
+            res.returncode = info["returncode"]
+            return res
+        if res.method == "frida":
+            from . import frida_tracer
+            info = frida_tracer.trace(cmd, timeout)
+            res.ran = not info["notes"]
+            res.api_calls = info["api_calls"]
+            res.notes = info["notes"]
+            res.timed_out = info["timed_out"]
+            if not res.ran:
+                res.skipped_reason = "; ".join(info["notes"])
+            return res
 
         before = _snapshot(workdir)
         start = time.perf_counter()

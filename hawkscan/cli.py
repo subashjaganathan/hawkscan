@@ -32,20 +32,38 @@ _NOTABLE = ("powershell", "cmd", "wscript", "cscript", "mshta", "rundll32",
             "regsvr32", "bitsadmin", "certutil", "schtasks", "curl", "wget")
 
 
-def _run_dynamic(res, path, timeout: int, detonate: bool) -> None:
+def _run_dynamic(res, path, timeout: int, detonate: bool, method: str) -> None:
     """Run dynamic analysis and merge behavioural findings into the result."""
     from .dynamic import run_sample
 
-    sb = run_sample(path, res.info.file_type, timeout=timeout, allow_detonate=detonate)
+    sb = run_sample(path, res.info.file_type, timeout=timeout,
+                    allow_detonate=detonate, method=method)
     res.dynamic = sb.to_dict()
 
     if not sb.ran:
+        reason = sb.skipped_reason or ("; ".join(sb.notes) if sb.notes else
+                                       "no observable behaviour")
         res.findings.append(Finding(
             analyzer="dynamic", title="Dynamic analysis not run",
-            severity=Severity.INFO, category="dynamic", detail=sb.skipped_reason))
+            severity=Severity.INFO, category="dynamic", detail=reason))
         return
 
     new: list[Finding] = []
+    for call in sb.api_calls:
+        notable = any(n in call.lower() for n in
+                      ("injection", "writeprocess", "createremote", "virtualalloc",
+                       "createprocess", "regsetvalue", "urldownload", "crypt",
+                       "telephony", "execution", "dynamic-code"))
+        new.append(Finding(
+            analyzer="dynamic", title=f"API/behaviour: {call[:80]}",
+            severity=Severity.MEDIUM if notable else Severity.LOW,
+            category="behaviour", detail="Observed at runtime via API hooking."))
+    for sc in sb.syscalls:
+        notable = sc in ("ptrace", "execve", "clone", "fork", "mprotect", "connect")
+        new.append(Finding(
+            analyzer="dynamic", title=f"Syscall: {sc}",
+            severity=Severity.LOW if notable else Severity.INFO,
+            category="behaviour", detail="Observed via strace."))
     for child in sb.child_processes:
         notable = any(n in child.lower() for n in _NOTABLE)
         new.append(Finding(
@@ -117,6 +135,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Required alongside --dynamic to actually execute the sample.")
     p.add_argument("--dynamic-timeout", metavar="SEC", type=int, default=20,
                    help="Seconds to let a sample run under dynamic analysis.")
+    p.add_argument("--dynamic-method", choices=["auto", "monitor", "strace",
+                                                "frida", "adb"], default="auto",
+                   help="Dynamic tracer: auto (default), monitor, strace (Linux), "
+                        "frida (API hooking), adb (Android).")
     p.add_argument("-V", "--version", action="version",
                    version=f"HawkScan {__version__}")
     return p
@@ -162,7 +184,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"hawkscan: error scanning {f}: {exc}", file=sys.stderr)
             continue
         if args.dynamic:
-            _run_dynamic(res, f, args.dynamic_timeout, args.detonate)
+            _run_dynamic(res, f, args.dynamic_timeout, args.detonate,
+                         args.dynamic_method)
 
         results.append(res)
         worst = max(worst, res.verdict)

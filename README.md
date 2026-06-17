@@ -183,6 +183,16 @@ hawkscan sample.exe --dynamic --detonate --dynamic-timeout 30
 Both `--dynamic` and `--detonate` are required to actually run a sample, and the
 process tree is killed when the timeout elapses.
 
+Tracers (`--dynamic-method`, default `auto`):
+
+- `monitor` - process tree, dropped files, network (psutil optional)
+- `strace` - Linux syscall tracing (file/network/process)
+- `frida` - cross-platform API hooking (requires the `frida` package)
+- `adb` - Android: installs the APK on a connected emulator, captures logcat
+
+`auto` picks the best available tracer for the file type and platform, falling
+back to `monitor`.
+
 ## Reducing false positives
 
 - Allowlist known good files by putting their SHA256 hashes (one per line) in

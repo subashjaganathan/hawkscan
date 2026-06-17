@@ -25,6 +25,10 @@ full = [
 dev = [
     "pytest>=7.0",
 ]
+dynamic = [
+    "psutil>=5.9",
+    "frida>=16.0",
+]
 
 [project.scripts]
 hawkscan = "hawkscan.cli:main"
