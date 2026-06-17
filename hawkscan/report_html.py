@@ -123,6 +123,24 @@ def _file_section(r: ScanResult) -> str:
                          f"{_esc(r.mitre[tid]['name'])}</span>")
         parts.append("</div>")
 
+    # Dynamic / behavioural analysis (only present when --dynamic was used).
+    dyn = r.dynamic
+    if dyn and dyn.get("ran"):
+        parts.append(f"<h2>Dynamic analysis ({_esc(dyn.get('method',''))})</h2>"
+                     "<div class='card'>")
+        for label, key in [("Child processes", "child_processes"),
+                           ("Dropped files", "files_created"),
+                           ("Network", "network"), ("API calls", "api_calls"),
+                           ("Syscalls", "syscalls")]:
+            vals = dyn.get(key) or []
+            if vals:
+                parts.append(f"<div class='cap'><b>{_esc(label)}</b>: "
+                             f"<span class='muted'>{_esc(', '.join(vals[:20]))}"
+                             "</span></div>")
+        if dyn.get("timed_out"):
+            parts.append("<div class='cap muted'>ran until timeout</div>")
+        parts.append("</div>")
+
     return "\n".join(parts)
 
 

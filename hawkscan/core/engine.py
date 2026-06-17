@@ -80,13 +80,16 @@ DEFAULT_MAX_SCAN_SIZE = 256 * 1024 * 1024  # 256 MiB
 # ruleset matching many rules of one theme from trivially maxing the verdict.
 CATEGORY_SCORE_CAP = 120
 
-# Per-user allowlist of known-good SHA-256 hashes (one per line, '#' comments).
+# Per-user hash lists (SHA-256, one per line, '#' comments). The allowlist marks
+# known-good files (forced Clean); the denylist marks known-bad files (forced
+# Malicious) for instant offline detection of samples you have already triaged.
 _ALLOWLIST_PATH = Path.home() / ".hawkscan" / "allowlist.txt"
+_DENYLIST_PATH = Path.home() / ".hawkscan" / "denylist.txt"
 
 
-def _load_allowlist() -> set[str]:
+def _load_hashlist(path: Path) -> set[str]:
     try:
-        lines = _ALLOWLIST_PATH.read_text(encoding="utf-8").splitlines()
+        lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
         return set()
     out = set()
@@ -95,6 +98,10 @@ def _load_allowlist() -> set[str]:
         if len(ln) == 64:
             out.add(ln)
     return out
+
+
+def _load_allowlist() -> set[str]:
+    return _load_hashlist(_ALLOWLIST_PATH)
 
 
 class Engine:
@@ -109,6 +116,7 @@ class Engine:
         self.max_scan_size = max_scan_size
         self.extract_dir = extract_dir
         self.allowlist = _load_allowlist()
+        self.denylist = _load_hashlist(_DENYLIST_PATH)
 
     def scan(self, path: str | Path) -> ScanResult:
         start = time.perf_counter()
@@ -127,6 +135,18 @@ class Engine:
                 detail="SHA-256 matched an entry in ~/.hawkscan/allowlist.txt.",
             ))
             result.verdict = Verdict.CLEAN
+            result.duration_ms = (time.perf_counter() - start) * 1000
+            return result
+
+        # Known-bad denylist forces a malicious verdict (instant offline hit).
+        if info.sha256 in self.denylist:
+            result.findings.append(Finding(
+                analyzer="denylist", title="Hash is on the known-bad denylist",
+                severity=Severity.CRITICAL, category="denylist",
+                detail="SHA-256 matched an entry in ~/.hawkscan/denylist.txt.",
+            ))
+            result.raw_score = result.score = 200  # force the Malicious band
+            result.verdict = Verdict.MALICIOUS
             result.duration_ms = (time.perf_counter() - start) * 1000
             return result
 

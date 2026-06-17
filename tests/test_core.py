@@ -99,6 +99,29 @@ def test_category_cap_limits_runaway_score():
     assert capped == CATEGORY_SCORE_CAP
 
 
+def test_denylist_forces_malicious(tmp_path):
+    f = tmp_path / "x.bin"
+    f.write_bytes(b"harmless content")
+    sha = fileinfo.inspect(f).sha256
+    eng = Engine()
+    eng.denylist = {sha}
+    res = eng.scan(f)
+    assert res.verdict == Verdict.MALICIOUS
+    assert any(x.category == "denylist" for x in res.findings)
+
+
+def test_parallel_scan_preserves_order(tmp_path):
+    from hawkscan.cli import _scan_files
+    files = []
+    for i in range(6):
+        p = tmp_path / f"f{i}.txt"
+        p.write_text(f"file number {i}")
+        files.append(p)
+    out = _scan_files(Engine(), files, jobs=4)
+    assert [o[0] for o in out] == files          # order preserved
+    assert all(err is None for _, _, err in out)  # all scanned ok
+
+
 def test_dedup_drops_identical_findings():
     from hawkscan.core.findings import Finding
     a = Finding(analyzer="x", title="same", severity=Severity.HIGH, category="c")

@@ -27,6 +27,7 @@ _SEV_MAP = {
 
 _DEFAULT_RULES_DIR = Path(__file__).resolve().parent.parent / "rules"
 _compiled_cache: dict = {}
+_skipped_files: list = []  # rule files dropped in the last fresh compile
 
 
 def _collect_rule_dirs(custom: Path | None) -> list[Path]:
@@ -76,6 +77,7 @@ class YaraAnalyzer(Analyzer):
         return Severity.HIGH
 
     def _compile(self, dirs: list[Path]):
+        _skipped_files.clear()  # reset; repopulated only on a fresh compile
         # Gather every rule file across all directories (recursively, so a
         # whole rule TREE passed to --rules works) under unique namespaces.
         sources: dict[str, str] = {}
@@ -119,21 +121,21 @@ class YaraAnalyzer(Analyzer):
         _compiled_cache[key] = compiled
         return compiled
 
-    @staticmethod
-    def _compile_sources(sources: dict[str, str]):
+    def _compile_sources(self, sources: dict[str, str]):
         try:
             return yara.compile(filepaths=sources)
         except yara.Error:
             # Community rulesets occasionally contain a file that won't compile
             # (missing module/external). Fall back to per-file so one bad file
-            # doesn't disable the entire set.
+            # doesn't disable the entire set - but record which were skipped so
+            # the scan can surface it rather than silently losing coverage.
             good: dict[str, str] = {}
             for ns, path in sources.items():
                 try:
                     yara.compile(filepath=path)
                     good[ns] = path
-                except yara.Error:
-                    continue
+                except yara.Error as exc:
+                    _skipped_files.append(f"{Path(path).name}: {exc}")
             return yara.compile(filepaths=good) if good else None
 
     @staticmethod
@@ -155,6 +157,14 @@ class YaraAnalyzer(Analyzer):
         compiled = self._compile(dirs)
         if compiled is None:
             return
+
+        if _skipped_files:
+            yield Finding(
+                analyzer=self.name,
+                title=f"{len(_skipped_files)} YARA rule file(s) failed to compile",
+                severity=Severity.INFO, category="coverage",
+                detail="; ".join(_skipped_files[:5]),
+            )
 
         matches = compiled.match(data=ctx.read_all())
         for m in matches:

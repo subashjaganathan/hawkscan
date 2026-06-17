@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,29 @@ from . import __version__
 from .core.engine import Engine
 from .core.findings import Verdict, Finding, Severity, score_to_verdict
 from . import report
+
+
+def _scan_files(engine, files, jobs: int):
+    """Scan files, returning [(path, result|None, error|None)] in input order.
+
+    The first file is scanned sequentially to warm the shared (process-global)
+    compiled-YARA cache before workers start, avoiding redundant compiles and
+    on-disk cache write races.
+    """
+    def one(f):
+        try:
+            return (f, engine.scan(f), None)
+        except Exception as exc:  # never let one file sink the batch
+            return (f, None, f"{type(exc).__name__}: {exc}")
+
+    if jobs <= 1 or len(files) <= 1:
+        return [one(f) for f in files]
+
+    from concurrent.futures import ThreadPoolExecutor
+    first = one(files[0])  # warm caches
+    rest = files[1:]
+    with ThreadPoolExecutor(max_workers=jobs) as ex:
+        return [first, *ex.map(one, rest)]
 
 
 def _gather_files(paths: list[str], recursive: bool) -> list[Path]:
@@ -106,6 +130,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "(core|extended|full; default core) and exit.")
     p.add_argument("-r", "--recursive", action="store_true",
                    help="Recurse into directories.")
+    p.add_argument("--jobs", type=int, default=0, metavar="N",
+                   help="Parallel scan workers (0 = auto). Forced to 1 with --dynamic.")
     p.add_argument("-j", "--json", action="store_true",
                    help="Emit JSON instead of a text report.")
     p.add_argument("--html", metavar="FILE",
@@ -174,14 +200,17 @@ def main(argv: list[str] | None = None) -> int:
     min_verdict = Verdict[args.min_verdict.upper()]
     fail_on = Verdict[args.fail_on.upper()] if args.fail_on else None
 
+    # Determine parallelism. Dynamic analysis executes samples, so it is always
+    # sequential; otherwise scale to the requested/auto worker count.
+    jobs = 1 if args.dynamic else (args.jobs or min(8, (os.cpu_count() or 2)))
+    scanned = _scan_files(engine, files, jobs)
+
     results = []
     worst = Verdict.CLEAN
     json_blobs = []
-    for f in files:
-        try:
-            res = engine.scan(f)
-        except Exception as exc:
-            print(f"hawkscan: error scanning {f}: {exc}", file=sys.stderr)
+    for f, res, err in scanned:
+        if err is not None:
+            print(f"hawkscan: error scanning {f}: {err}", file=sys.stderr)
             continue
         if args.dynamic:
             _run_dynamic(res, f, args.dynamic_timeout, args.detonate,

@@ -126,6 +126,52 @@ class PEAnalyzer(Analyzer):
                 detail="No embedded Authenticode signature.",
             )
 
+        # Overlay: data appended after the last section. Large, high-entropy
+        # overlays often carry a bundled/encrypted second-stage payload.
+        try:
+            ov_off = pe.get_overlay_data_start_offset()
+        except Exception:
+            ov_off = None
+        if ov_off is not None:
+            overlay = ctx.read_all()[ov_off:]
+            if len(overlay) > 2048:
+                ent = shannon_entropy(overlay)
+                high = ent >= 7.2
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"Overlay data appended ({len(overlay):,} bytes, "
+                          f"entropy {ent:.2f})",
+                    severity=Severity.MEDIUM if high else Severity.LOW,
+                    category="dropper",
+                    detail="Data after the last section; high entropy suggests a "
+                           "bundled or encrypted payload." if high else
+                           "Data appended after the last PE section.",
+                    data={"overlay_size": len(overlay), "entropy": round(ent, 3)},
+                )
+
+        # Resource directory: an embedded PE inside a resource is a classic
+        # dropper pattern (the loader carries its payload as a resource).
+        if hasattr(pe, "DIRECTORY_ENTRY_RESOURCE"):
+            for rtype in pe.DIRECTORY_ENTRY_RESOURCE.entries:
+                for rid in getattr(rtype, "directory", {}).entries if hasattr(rtype, "directory") else []:
+                    for lang in getattr(rid, "directory", {}).entries if hasattr(rid, "directory") else []:
+                        try:
+                            rva = lang.data.struct.OffsetToData
+                            size = lang.data.struct.Size
+                            blob = pe.get_data(rva, min(size, 4))
+                        except Exception:
+                            continue
+                        if blob[:2] == b"MZ":
+                            yield Finding(
+                                analyzer=self.name,
+                                title="Embedded PE in resource section",
+                                severity=Severity.HIGH,
+                                category="dropper",
+                                detail="A resource entry begins with an MZ header; "
+                                       "the binary carries an embedded executable.",
+                            )
+                            return  # one is enough
+
     # ---- fallback path ---------------------------------------------------
     def _analyze_basic(self, ctx: AnalysisContext) -> Iterable[Finding]:
         data = ctx.read_all()
