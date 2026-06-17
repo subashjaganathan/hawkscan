@@ -65,6 +65,9 @@ hawkscan -r ./downloads --min-verdict suspicious
 # Machine readable output for pipelines
 hawkscan sample.bin --json
 
+# Write a self-contained HTML report
+hawkscan sample.bin --html report.html
+
 # Return a non-zero exit code for automation or CI gates
 hawkscan -r ./build --fail-on likely_malicious
 

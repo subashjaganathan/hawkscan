@@ -40,6 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Recurse into directories.")
     p.add_argument("-j", "--json", action="store_true",
                    help="Emit JSON instead of a text report.")
+    p.add_argument("--html", metavar="FILE",
+                   help="Write a self-contained HTML report to FILE.")
     p.add_argument("--rules", metavar="DIR",
                    help="Directory of additional YARA (.yar) rules.")
     p.add_argument("--show-info", action="store_true",
@@ -110,6 +112,14 @@ def main(argv: list[str] | None = None) -> int:
         elif not args.quiet:
             print(report.render_text(res, show_info=args.show_info, debug=args.debug))
             print()
+
+    if args.html:
+        from . import report_html
+        reported = [r for r in results if r.verdict >= min_verdict] or results
+        Path(args.html).write_text(
+            report_html.render_html(reported), encoding="utf-8"
+        )
+        print(f"HTML report written to {args.html}")
 
     if args.json:
         import json as _json
