@@ -162,6 +162,27 @@ decision and tune the thresholds in one place.
 The capability and MITRE ATT&CK output gives you a quick behavioural profile of a
 binary: what it can do, and which adversary techniques those abilities map to.
 
+## Dynamic analysis (optional, VM only)
+
+HawkScan is static by default and never runs a file. An optional behavioural
+module can execute a sample and observe what it does (child processes, dropped
+files, network connections). Process and network detail improve if `psutil` is
+installed.
+
+WARNING: this executes the sample. Use it ONLY inside a disposable, snapshotted
+analysis VM with controlled networking. It refuses to run unless you set
+`HAWKSCAN_SANDBOX=1`, which you should set only in such a VM, never on a
+workstation.
+
+```bash
+# Inside a throwaway analysis VM only:
+export HAWKSCAN_SANDBOX=1
+hawkscan sample.exe --dynamic --detonate --dynamic-timeout 30
+```
+
+Both `--dynamic` and `--detonate` are required to actually run a sample, and the
+process tree is killed when the timeout elapses.
+
 ## Reducing false positives
 
 - Allowlist known good files by putting their SHA256 hashes (one per line) in

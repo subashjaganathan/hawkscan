@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import __version__
 from .core.engine import Engine
-from .core.findings import Verdict
+from .core.findings import Verdict, Finding, Severity, score_to_verdict
 from . import report
 
 
@@ -24,6 +24,56 @@ def _gather_files(paths: list[str], recursive: bool) -> list[Path]:
         else:
             print(f"hawkscan: not found: {p}", file=sys.stderr)
     return files
+
+
+_RISKY_DROP_EXTS = {".exe", ".dll", ".scr", ".ps1", ".bat", ".cmd", ".vbs",
+                    ".js", ".jar", ".hta", ".lnk"}
+_NOTABLE = ("powershell", "cmd", "wscript", "cscript", "mshta", "rundll32",
+            "regsvr32", "bitsadmin", "certutil", "schtasks", "curl", "wget")
+
+
+def _run_dynamic(res, path, timeout: int, detonate: bool) -> None:
+    """Run dynamic analysis and merge behavioural findings into the result."""
+    from .dynamic import run_sample
+
+    sb = run_sample(path, res.info.file_type, timeout=timeout, allow_detonate=detonate)
+    res.dynamic = sb.to_dict()
+
+    if not sb.ran:
+        res.findings.append(Finding(
+            analyzer="dynamic", title="Dynamic analysis not run",
+            severity=Severity.INFO, category="dynamic", detail=sb.skipped_reason))
+        return
+
+    new: list[Finding] = []
+    for child in sb.child_processes:
+        notable = any(n in child.lower() for n in _NOTABLE)
+        new.append(Finding(
+            analyzer="dynamic",
+            title=f"Spawned process: {child[:80]}",
+            severity=Severity.MEDIUM if notable else Severity.LOW,
+            category="execution", detail="Child process created at runtime."))
+    for f in sb.files_created:
+        ext = ("." + f.rsplit(".", 1)[-1].lower()) if "." in f else ""
+        new.append(Finding(
+            analyzer="dynamic", title=f"Dropped file: {f}",
+            severity=Severity.MEDIUM if ext in _RISKY_DROP_EXTS else Severity.INFO,
+            category="dropper", detail="File written during execution."))
+    for conn in sb.network:
+        new.append(Finding(
+            analyzer="dynamic", title=f"Network connection: {conn}",
+            severity=Severity.MEDIUM, category="network",
+            detail="Outbound connection made at runtime."))
+    if sb.timed_out:
+        new.append(Finding(
+            analyzer="dynamic", title="Sample ran until timeout",
+            severity=Severity.INFO, category="dynamic",
+            detail=f"Did not exit within {timeout}s (long-running/persistent)."))
+
+    res.findings.extend(new)
+    res.findings = Engine._dedup(res.findings)
+    res.raw_score, res.score = Engine._score(res.findings)
+    res.verdict = score_to_verdict(res.score)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,6 +110,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Include full analyzer tracebacks in output.")
     p.add_argument("--extract", metavar="DIR",
                    help="Carve embedded files (PE/ELF/ZIP/...) into DIR.")
+    p.add_argument("--dynamic", action="store_true",
+                   help="DANGER: run the sample and observe its behaviour. Only "
+                        "works inside a VM with HAWKSCAN_SANDBOX=1 set.")
+    p.add_argument("--detonate", action="store_true",
+                   help="Required alongside --dynamic to actually execute the sample.")
+    p.add_argument("--dynamic-timeout", metavar="SEC", type=int, default=20,
+                   help="Seconds to let a sample run under dynamic analysis.")
     p.add_argument("-V", "--version", action="version",
                    version=f"HawkScan {__version__}")
     return p
@@ -104,6 +161,9 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"hawkscan: error scanning {f}: {exc}", file=sys.stderr)
             continue
+        if args.dynamic:
+            _run_dynamic(res, f, args.dynamic_timeout, args.detonate)
+
         results.append(res)
         worst = max(worst, res.verdict)
 

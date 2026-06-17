@@ -25,6 +25,7 @@ class ScanResult:
     raw_score: int = 0  # pre-cap score, for transparency
     capabilities: dict[str, Any] = field(default_factory=dict)  # category -> {apis, techniques}
     mitre: dict[str, Any] = field(default_factory=dict)         # technique id -> {name, ...}
+    dynamic: dict[str, Any] = field(default_factory=dict)        # behavioural-analysis result
     duration_ms: float = 0.0
 
     @property
@@ -59,6 +60,7 @@ class ScanResult:
             "confidence": self.confidence,
             "capabilities": self.capabilities,
             "mitre_attack": self.mitre,
+            "dynamic": self.dynamic,
             "findings": [f.to_dict() for f in self.findings],
             "analyzers_run": self.analyzers_run,
             "analyzers_skipped": self.analyzers_skipped,
