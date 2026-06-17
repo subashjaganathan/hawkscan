@@ -9,6 +9,8 @@ from .macho_analyzer import MachOAnalyzer
 from .capability_analyzer import CapabilityAnalyzer
 from .office_analyzer import OfficeAnalyzer
 from .pdf_analyzer import PDFAnalyzer
+from .rtf_analyzer import RTFAnalyzer
+from .binprofile import BinProfileAnalyzer
 from .script_analyzer import ScriptAnalyzer
 from .archive_analyzer import ArchiveAnalyzer
 from .android_analyzer import AndroidAnalyzer
@@ -25,8 +27,10 @@ ALL_ANALYZERS: list[type[Analyzer]] = [
     ELFAnalyzer,
     MachOAnalyzer,
     CapabilityAnalyzer,  # after PE/ELF/Mach-O so it can read imports + strings
+    BinProfileAnalyzer,
     OfficeAnalyzer,
     PDFAnalyzer,
+    RTFAnalyzer,
     ScriptAnalyzer,
     ArchiveAnalyzer,
     AndroidAnalyzer,

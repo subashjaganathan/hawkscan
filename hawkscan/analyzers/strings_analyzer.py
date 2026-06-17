@@ -18,6 +18,23 @@ _UTF16_RE = re.compile(rb"(?:[\x20-\x7e]\x00){4,}")
 
 _URL_RE = re.compile(r"\b(?:https?|ftp)://[^\s\"'<>]{4,}", re.I)
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+# Benign domains that appear in legitimate binaries/documents (schemas, OS
+# telemetry, certificate/OCSP endpoints, CDNs). URLs on these are filtered out
+# of the IOC list so real C2 indicators stand out.
+_WHITELIST_DOMAINS = (
+    "w3.org", "schemas.microsoft.com", "schemas.openxmlformats.org",
+    "schemas.xmlsoap.org", "microsoft.com", "windows.com", "windowsupdate.com",
+    "msftncsi.com", "msftconnecttest.com", "digicert.com", "verisign.com",
+    "symantec.com", "sectigo.com", "globalsign.com", "entrust.net",
+    "ocsp.", "crl.", "go.microsoft.com", "apache.org", "python.org",
+    "openssl.org", "gnu.org", "mozilla.org", "googleapis.com", "gstatic.com",
+)
+
+
+def _is_whitelisted(url: str) -> bool:
+    low = url.lower()
+    return any(d in low for d in _WHITELIST_DOMAINS)
 _DOMAIN_RE = re.compile(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b", re.I)
 
 # (regex, title, severity, category) - high-signal capability strings.
@@ -107,13 +124,16 @@ class StringsAnalyzer(Analyzer):
                 )
 
         # Network IOCs (informational unless combined with other signals).
-        urls = sorted(set(_URL_RE.findall(blob)))[:25]
+        all_urls = sorted(set(_URL_RE.findall(blob)))
+        urls = [u for u in all_urls if not _is_whitelisted(u)][:25]
+        filtered = len(all_urls) - len([u for u in all_urls if not _is_whitelisted(u)])
         ips = sorted({ip for ip in _IPV4_RE.findall(blob)
                       if not ip.startswith(("0.", "127.", "255."))})[:25]
         if urls:
+            note = f" ({filtered} whitelisted hidden)" if filtered else ""
             yield Finding(
                 analyzer=self.name,
-                title=f"{len(urls)} embedded URL(s)",
+                title=f"{len(urls)} embedded URL(s){note}",
                 severity=Severity.INFO,
                 category="network",
                 detail="; ".join(urls[:10]),

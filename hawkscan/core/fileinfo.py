@@ -47,6 +47,7 @@ _MAGIC_SIGNATURES: list[tuple[int, bytes, str, str]] = [
     (0, b"BZh", "bzip2", "BZIP2 compressed data"),
     (0, b"\xfd7zXZ\x00", "xz", "XZ compressed data"),
     (0, b"\x4d\x53\x43\x46", "cab", "Microsoft Cabinet archive"),
+    (0, b"{\\rtf", "rtf", "Rich Text Format document"),
     (0, b"#!", "script", "Script with shebang"),
     (0, b"<?php", "script", "PHP script"),
     (0, b"\xff\xd8\xff", "image", "JPEG image"),

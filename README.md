@@ -152,6 +152,8 @@ decision and tune the thresholds in one place.
 | Archive | Double extension lures, encrypted archives, decompression bombs, executable members |
 | Android | APK and DEX analysis: categorizes requested permissions (high-risk, dangerous) and flags suspicious APIs (SMS fraud, dynamic code loading, accessibility abuse, device-admin, IMEI/IMSI theft, command execution) |
 | Capability | Groups imported APIs into behavioural categories (networking, injection, keylogging, persistence...) and maps them to MITRE ATT&CK techniques. The category inventory is informational; high confidence API combinations (such as the process injection triad) drive the score |
+| RTF | Detects embedded OLE objects, auto-updating objects, and exploit carriers (Equation Editor CVE-2017-11882/0802, OLE2Link CVE-2017-0199, Packager droppers) |
+| Binary profile | Identifies the compiler/runtime of a binary (Go, .NET, Rust, Nim, PyInstaller, AutoIt) to focus follow-up analysis |
 | Carver | Finds and extracts executables and archives (PE/ELF/ZIP/...) embedded at a non-zero offset inside a carrier file, a common dropper technique. Embedded PEs are sized from their headers so extraction captures the whole payload |
 | YARA | Signature matching from the built in and community rule sets |
 
