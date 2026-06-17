@@ -153,7 +153,7 @@ rule HawkScan_Ransomware_Behavior
         $g = "README" nocase
         $h = "DECRYPT" nocase
     condition:
-        ($a and $b) or ($d and $e) or ($f and $h) or ($g and $h and ($a or $f))
+        (($a or $c) and $b) or ($d and $e) or ($f and $h) or ($g and $h and ($a or $f))
 }
 
 rule HawkScan_Meterpreter_Shellcode
@@ -200,11 +200,12 @@ rule HawkScan_Reverse_Shell
         $b = "bash -i" nocase
         $c = "nc -e" nocase
         $d = "socket.SOCK_STREAM" nocase
-        $e = "cmd.exe /c" nocase
         $f = "powershell -nop -c" nocase
         $g = "/bin/sh -i" nocase
+        $h = "TCPClient" nocase
+        $i = "subprocess" nocase
     condition:
-        ($a and ($b or $g)) or $c or ($f and "TCPClient" nocase) or ($d and "subprocess" nocase)
+        ($a and ($b or $g)) or $c or ($f and $h) or ($d and $i)
 }
 
 rule HawkScan_Keylogger

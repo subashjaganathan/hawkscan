@@ -18,7 +18,6 @@ rule HawkScan_macOS_LaunchPersistence
         $c = "RunAtLoad" nocase
         $d = "KeepAlive" nocase
         $e = "/Library/LaunchAgents" nocase
-        $f = "com.apple." nocase
     condition:
         (any of ($a,$b,$e)) and (any of ($c,$d))
 }
@@ -36,7 +35,7 @@ rule HawkScan_macOS_AppleScript_Abuse
         $d = "display dialog" nocase
         $e = "NSAppleScript" nocase
     condition:
-        ($a and ($b or $c)) or ($b and $c) or ($d and $c)
+        ($a and ($b or $c)) or ($b and $c) or ($d and $c) or ($e and $b)
 }
 
 rule HawkScan_macOS_Gatekeeper_Tamper

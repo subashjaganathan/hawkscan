@@ -54,7 +54,7 @@ rule HawkScan_Linux_Userland_Rootkit
         $d = "readdir" nocase
         $e = "RTLD_NEXT" nocase
     condition:
-        ($a and ($c or $e)) or $b
+        ($a and ($c or $e)) or $b or ($a and $d)
 }
 
 rule HawkScan_Linux_SSH_Theft

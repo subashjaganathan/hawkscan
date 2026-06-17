@@ -52,7 +52,7 @@ rule HawkScan_Maldoc_DDE
         $d = "powershell" nocase
         $e = "\\\\..\\\\"
     condition:
-        ($a or $b) and ($c or $d)
+        (($a or $b) and ($c or $d)) or ($a and $e)
 }
 
 rule HawkScan_Maldoc_Remote_Template
