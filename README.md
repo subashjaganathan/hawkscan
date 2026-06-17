@@ -146,7 +146,7 @@ decision and tune the thresholds in one place.
 | PE | Dangerous Windows API imports, packer sections, section entropy, missing signature |
 | ELF | Architecture, ptrace anti debugging, LD_PRELOAD and cron persistence |
 | Mach-O | File type, missing code signature, LaunchAgent and LaunchDaemon persistence |
-| Office | VBA macros, auto execute triggers, shell and download calls inside macros |
+| Office | VBA macros, auto execute triggers, shell and download calls inside macros, encrypted/password-protected documents, and OneNote embedded-file droppers |
 | PDF | JavaScript, OpenAction, Launch actions, embedded files, name obfuscation |
 | Script | Base64 payloads, character code obfuscation, dynamic execution, hidden window flags |
 | Archive | Double extension lures, encrypted archives, decompression bombs, executable members |

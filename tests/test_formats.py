@@ -42,6 +42,16 @@ def test_binprofile_detects_dotnet(tmp_path):
     assert ".NET / managed" in labels
 
 
+def test_onenote_detected_with_embedded_object(tmp_path):
+    from hawkscan.analyzers.office_analyzer import OfficeAnalyzer
+    one = (b"\xe4\x52\x5c\x7b\x8c\xd8\xa7\x4d\xae\xb1\x53\x78\xd0\x29\x96\xd3"
+           + b"\x00" * 32 + b"\xe7\x16\xe3\xbd\x65\x26\x11\x45" + b"MZ")
+    ctx = _ctx(tmp_path, "n.one", one)
+    assert ctx.info.file_type == "onenote"
+    titles = [f.title for f in OfficeAnalyzer().analyze(ctx)]
+    assert any("OneNote embedded file" in t for t in titles)
+
+
 def test_ioc_whitelist():
     assert _is_whitelisted("http://schemas.microsoft.com/office")
     assert _is_whitelisted("http://www.w3.org/2000/svg")

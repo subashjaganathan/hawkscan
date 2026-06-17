@@ -30,13 +30,49 @@ class OfficeAnalyzer(Analyzer):
     name = "office"
 
     def applies(self, ctx: AnalysisContext) -> bool:
-        return ctx.info.file_type in {"office-ooxml", "ole"}
+        return ctx.info.file_type in {"office-ooxml", "ole", "onenote"}
 
     def analyze(self, ctx: AnalysisContext) -> Iterable[Finding]:
+        if ctx.info.file_type == "onenote":
+            yield from self._analyze_onenote(ctx)
+            return
+
+        # Encrypted Office docs are an OLE container with an EncryptedPackage
+        # stream. They evade content scanning and are common in phishing.
+        if ctx.info.file_type == "ole":
+            data = ctx.read_all()
+            if b"E\x00n\x00c\x00r\x00y\x00p\x00t\x00e\x00d\x00P\x00a\x00c" in data \
+                    or b"EncryptedPackage" in data:
+                yield Finding(
+                    analyzer=self.name,
+                    title="Encrypted/password-protected Office document",
+                    severity=Severity.MEDIUM,
+                    category="evasion",
+                    detail="Contains an EncryptedPackage stream; content cannot be "
+                           "scanned and is often used to bypass mail/AV filtering.",
+                )
+
         if _HAVE_OLEVBA:
             yield from self._analyze_olevba(ctx)
         else:
             yield from self._analyze_fallback(ctx)
+
+    def _analyze_onenote(self, ctx: AnalysisContext) -> Iterable[Finding]:
+        data = ctx.read_all()
+        yield Finding(analyzer=self.name, title="OneNote document",
+                      severity=Severity.INFO, category="format")
+        # OneNote malware hides payloads in FileDataStoreObject regions. The
+        # carver detects embedded PEs/scripts; here we flag the embedding itself.
+        # FileDataStoreObject GUID: {BDE316E7-2665-4511-A4C4-8D4D0B7A9EAC}.
+        if b"\xe7\x16\xe3\xbd\x65\x26\x11\x45" in data:
+            yield Finding(
+                analyzer=self.name,
+                title="OneNote embedded file object(s)",
+                severity=Severity.MEDIUM,
+                category="dropper",
+                detail="Contains FileDataStoreObject regions; OneNote attachments "
+                       "are a common delivery vector for embedded executables/scripts.",
+            )
 
     def _analyze_olevba(self, ctx: AnalysisContext) -> Iterable[Finding]:
         parser = VBA_Parser(str(ctx.path), data=ctx.read_all())

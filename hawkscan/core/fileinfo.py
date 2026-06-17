@@ -40,6 +40,7 @@ _MAGIC_SIGNATURES: list[tuple[int, bytes, str, str]] = [
     (0, b"%PDF", "pdf", "PDF document"),
     (0, b"PK\x03\x04", "zip", "ZIP archive (or OOXML/JAR/APK)"),
     (0, b"PK\x05\x06", "zip", "ZIP archive (empty)"),
+    (0, b"\xe4\x52\x5c\x7b\x8c\xd8\xa7\x4d", "onenote", "Microsoft OneNote document"),
     (0, b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "ole", "OLE2 compound file (legacy Office/MSI)"),
     (0, b"Rar!\x1a\x07", "rar", "RAR archive"),
     (0, b"\x1f\x8b", "gzip", "GZIP compressed data"),
