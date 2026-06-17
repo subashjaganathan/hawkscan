@@ -20,26 +20,6 @@ try:
 except Exception:
     _HAVE_PEFILE = False
 
-# Imports that, in combination, indicate code-injection / anti-analysis intent.
-_SUSPICIOUS_IMPORTS = {
-    "VirtualAllocEx": ("injection", Severity.HIGH),
-    "WriteProcessMemory": ("injection", Severity.HIGH),
-    "CreateRemoteThread": ("injection", Severity.HIGH),
-    "NtUnmapViewOfSection": ("injection", Severity.HIGH),
-    "SetWindowsHookExA": ("spyware", Severity.MEDIUM),
-    "SetWindowsHookExW": ("spyware", Severity.MEDIUM),
-    "GetAsyncKeyState": ("spyware", Severity.MEDIUM),
-    "IsDebuggerPresent": ("anti-analysis", Severity.LOW),
-    "CheckRemoteDebuggerPresent": ("anti-analysis", Severity.LOW),
-    "NtQueryInformationProcess": ("anti-analysis", Severity.LOW),
-    "VirtualProtect": ("injection", Severity.LOW),
-    "WinExec": ("execution", Severity.LOW),
-    "ShellExecuteA": ("execution", Severity.LOW),
-    "URLDownloadToFileA": ("network", Severity.MEDIUM),
-    "InternetOpenUrlA": ("network", Severity.LOW),
-    "CryptEncrypt": ("ransomware", Severity.LOW),
-}
-
 _KNOWN_PACKER_SECTIONS = {
     b"UPX0", b"UPX1", b"UPX2", b".aspack", b".adata", b"ASPack",
     b".nsp0", b".nsp1", b"FSG!", b".petite", b".themida", b"pebundle",
@@ -114,24 +94,15 @@ class PEAnalyzer(Analyzer):
                 detail="Section names match a known packer (UPX/ASPack/Themida/etc.).",
             )
 
-        # Import-based capability scoring.
-        hits: list[str] = []
+        # Collect the full import table for the CapabilityAnalyzer, which owns
+        # API-to-capability/ATT&CK scoring (so we don't double-count here).
         if hasattr(pe, "DIRECTORY_ENTRY_IMPORT"):
+            api_names: set[str] = set()
             for entry in pe.DIRECTORY_ENTRY_IMPORT:
                 for imp in entry.imports:
-                    if not imp.name:
-                        continue
-                    fn = imp.name.decode("latin1", "ignore")
-                    if fn in _SUSPICIOUS_IMPORTS:
-                        category, severity = _SUSPICIOUS_IMPORTS[fn]
-                        hits.append(fn)
-                        yield Finding(
-                            analyzer=self.name,
-                            title=f"Suspicious import: {fn}",
-                            severity=severity,
-                            category=category,
-                            detail=f"Imported from {entry.dll.decode('latin1','ignore')}.",
-                        )
+                    if imp.name:
+                        api_names.add(imp.name.decode("latin1", "ignore"))
+            ctx.cache["api_names"] = api_names
         else:
             yield Finding(
                 analyzer=self.name,

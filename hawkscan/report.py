@@ -74,6 +74,24 @@ def render_text(result: ScanResult, show_info: bool = False, debug: bool = False
         out.append("  No notable findings.")
     out.append("")
 
+    # Capability breakdown (Qu1cksc0pe-style).
+    if result.capabilities:
+        out.append(_c("  Capabilities:", "1"))
+        for cat in sorted(result.capabilities):
+            apis = result.capabilities[cat]["apis"]
+            shown = ", ".join(apis[:6])
+            more = f" (+{len(apis) - 6})" if len(apis) > 6 else ""
+            out.append(f"   - {cat}: {_c(shown + more, '90')}")
+        out.append("")
+
+    # MITRE ATT&CK techniques.
+    if result.mitre:
+        out.append(_c("  MITRE ATT&CK:", "1"))
+        for tid in sorted(result.mitre):
+            t = result.mitre[tid]
+            out.append(f"   - {tid}  {t['name']}")
+        out.append("")
+
     meta = f"  Analyzers run: {', '.join(result.analyzers_run) or 'none'}"
     out.append(_c(meta, "90"))
     if result.analyzers_skipped:

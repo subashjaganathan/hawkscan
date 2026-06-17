@@ -6,6 +6,7 @@ from .strings_analyzer import StringsAnalyzer
 from .pe_analyzer import PEAnalyzer
 from .elf_analyzer import ELFAnalyzer
 from .macho_analyzer import MachOAnalyzer
+from .capability_analyzer import CapabilityAnalyzer
 from .office_analyzer import OfficeAnalyzer
 from .pdf_analyzer import PDFAnalyzer
 from .script_analyzer import ScriptAnalyzer
@@ -21,6 +22,7 @@ ALL_ANALYZERS: list[type[Analyzer]] = [
     PEAnalyzer,
     ELFAnalyzer,
     MachOAnalyzer,
+    CapabilityAnalyzer,  # after PE/ELF/Mach-O so it can read imports + strings
     OfficeAnalyzer,
     PDFAnalyzer,
     ScriptAnalyzer,

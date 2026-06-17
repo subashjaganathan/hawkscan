@@ -23,6 +23,8 @@ class ScanResult:
     errors: dict[str, str] = field(default_factory=dict)
     traces: dict[str, str] = field(default_factory=dict)  # full tracebacks (debug)
     raw_score: int = 0  # pre-cap score, for transparency
+    capabilities: dict[str, Any] = field(default_factory=dict)  # category -> {apis, techniques}
+    mitre: dict[str, Any] = field(default_factory=dict)         # technique id -> {name, ...}
     duration_ms: float = 0.0
 
     @property
@@ -55,6 +57,8 @@ class ScanResult:
             "score": self.score,
             "raw_score": self.raw_score,
             "confidence": self.confidence,
+            "capabilities": self.capabilities,
+            "mitre_attack": self.mitre,
             "findings": [f.to_dict() for f in self.findings],
             "analyzers_run": self.analyzers_run,
             "analyzers_skipped": self.analyzers_skipped,
@@ -165,6 +169,15 @@ class Engine:
             except Exception as exc:  # one analyzer must never sink the scan
                 result.errors[cls.name] = f"{type(exc).__name__}: {exc}"
                 result.traces[cls.name] = traceback.format_exc()
+
+        # Surface structured capability + ATT&CK data computed by the analyzer.
+        caps = ctx.cache.get("capabilities")
+        if caps:
+            result.capabilities = {
+                cat: {"apis": cap.apis, "techniques": cap.techniques}
+                for cat, cap in caps.items()
+            }
+        result.mitre = ctx.cache.get("mitre") or {}
 
         result.findings = self._dedup(result.findings)
         result.raw_score, result.score = self._score(result.findings)

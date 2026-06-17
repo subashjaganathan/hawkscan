@@ -144,7 +144,11 @@ decision and tune the thresholds in one place.
 | PDF | JavaScript, OpenAction, Launch actions, embedded files, name obfuscation |
 | Script | Base64 payloads, character code obfuscation, dynamic execution, hidden window flags |
 | Archive | Double extension lures, encrypted archives, decompression bombs, executable members |
+| Capability | Groups imported APIs into behavioural categories (networking, injection, keylogging, persistence...) and maps them to MITRE ATT&CK techniques. The category inventory is informational; high confidence API combinations (such as the process injection triad) drive the score |
 | YARA | Signature matching from the built in and community rule sets |
+
+The capability and MITRE ATT&CK output gives you a quick behavioural profile of a
+binary: what it can do, and which adversary techniques those abilities map to.
 
 ## Reducing false positives
 
