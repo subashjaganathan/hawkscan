@@ -71,8 +71,11 @@ hawkscan sample.bin --html report.html
 # Return a non-zero exit code for automation or CI gates
 hawkscan -r ./build --fail-on likely_malicious
 
-# Use an additional directory of YARA rules
+# Use an additional directory (or whole tree) of YARA rules.
+# --rules recurses, so you can point it at a nested rule collection. The rules
+# are loaded at scan time from wherever they live, under their own license.
 hawkscan --rules ./my_rules sample.bin
+hawkscan --rules /path/to/rule/tree sample.bin
 
 # Carve embedded files (hidden PE/ELF/ZIP) out of a carrier
 hawkscan dropper.pdf --extract ./carved

@@ -76,10 +76,11 @@ class YaraAnalyzer(Analyzer):
         return Severity.HIGH
 
     def _compile(self, dirs: list[Path]):
-        # Gather every rule file across all directories under unique namespaces.
+        # Gather every rule file across all directories (recursively, so a
+        # whole rule TREE passed to --rules works) under unique namespaces.
         sources: dict[str, str] = {}
         for d in dirs:
-            for rf in sorted(d.glob("*.yar")) + sorted(d.glob("*.yara")):
+            for rf in sorted(d.rglob("*.yar")) + sorted(d.rglob("*.yara")):
                 ns = rf.stem
                 while ns in sources:  # avoid namespace collisions across dirs
                     ns += "_"
