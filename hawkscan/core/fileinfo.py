@@ -31,6 +31,7 @@ class FileInfo:
 _MAGIC_SIGNATURES: list[tuple[int, bytes, str, str]] = [
     (0, b"MZ", "pe", "Windows PE executable (EXE/DLL/SYS)"),
     (0, b"\x7fELF", "elf", "Linux/Unix ELF executable"),
+    (0, b"dex\n", "dex", "Android Dalvik DEX bytecode"),
     (0, b"\xfe\xed\xfa\xce", "macho", "Mach-O executable (32-bit BE)"),
     (0, b"\xfe\xed\xfa\xcf", "macho", "Mach-O executable (64-bit BE)"),
     (0, b"\xcf\xfa\xed\xfe", "macho", "Mach-O executable (64-bit LE)"),

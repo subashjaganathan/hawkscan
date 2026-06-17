@@ -147,6 +147,7 @@ decision and tune the thresholds in one place.
 | PDF | JavaScript, OpenAction, Launch actions, embedded files, name obfuscation |
 | Script | Base64 payloads, character code obfuscation, dynamic execution, hidden window flags |
 | Archive | Double extension lures, encrypted archives, decompression bombs, executable members |
+| Android | APK and DEX analysis: categorizes requested permissions (high-risk, dangerous) and flags suspicious APIs (SMS fraud, dynamic code loading, accessibility abuse, device-admin, IMEI/IMSI theft, command execution) |
 | Capability | Groups imported APIs into behavioural categories (networking, injection, keylogging, persistence...) and maps them to MITRE ATT&CK techniques. The category inventory is informational; high confidence API combinations (such as the process injection triad) drive the score |
 | YARA | Signature matching from the built in and community rule sets |
 
