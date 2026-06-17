@@ -51,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Exit non-zero if any file reaches this band (for CI/automation).")
     p.add_argument("-q", "--quiet", action="store_true",
                    help="Suppress per-file output; print only the summary/JSON.")
+    p.add_argument("--max-size", metavar="MB", type=int, default=256,
+                   help="Skip deep analysis for files larger than this (MiB). "
+                        "Default 256.")
+    p.add_argument("--debug", action="store_true",
+                   help="Include full analyzer tracebacks in output.")
     p.add_argument("-V", "--version", action="version",
                    version=f"HawkScan {__version__}")
     return p
@@ -75,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     rules_dir = Path(args.rules) if args.rules else None
-    engine = Engine(rules_dir=rules_dir)
+    engine = Engine(rules_dir=rules_dir, max_scan_size=args.max_size * 1024 * 1024)
 
     files = _gather_files(args.paths, args.recursive)
     if not files:
@@ -101,9 +106,9 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         if args.json:
-            json_blobs.append(res.to_dict())
+            json_blobs.append(res.to_dict(include_traces=args.debug))
         elif not args.quiet:
-            print(report.render_text(res, show_info=args.show_info))
+            print(report.render_text(res, show_info=args.show_info, debug=args.debug))
             print()
 
     if args.json:

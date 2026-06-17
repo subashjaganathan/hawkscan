@@ -35,7 +35,7 @@ def render_json(result: ScanResult) -> str:
     return json.dumps(result.to_dict(), indent=2)
 
 
-def render_text(result: ScanResult, show_info: bool = False) -> str:
+def render_text(result: ScanResult, show_info: bool = False, debug: bool = False) -> str:
     info = result.info
     out: list[str] = []
     bar = "=" * 64
@@ -52,8 +52,11 @@ def render_text(result: ScanResult, show_info: bool = False) -> str:
     out.append("")
 
     vcolor = _VERDICT_COLOR[result.verdict]
+    score_txt = f"score {result.score}"
+    if result.raw_score != result.score:
+        score_txt += f" (capped from {result.raw_score})"
     out.append("  " + _c(f"VERDICT: {result.verdict.label.upper()}", vcolor)
-               + f"   (score {result.score}, confidence {result.confidence})")
+               + f"   ({score_txt}, confidence {result.confidence})")
     out.append("")
 
     findings = sorted(result.findings, key=lambda f: -int(f.severity))
@@ -77,9 +80,11 @@ def render_text(result: ScanResult, show_info: bool = False) -> str:
         skipped = ", ".join(f"{k} ({v})" for k, v in result.analyzers_skipped.items())
         out.append(_c(f"  Skipped: {skipped}", "90"))
     if result.errors:
-        errs = ", ".join(f"{k}: {v}" for k, v in result.errors.items()
-                         if not k.endswith(":trace"))
+        errs = ", ".join(f"{k}: {v}" for k, v in result.errors.items())
         out.append(_c(f"  Errors: {errs}", "31"))
+    if debug and result.traces:
+        for name, tb in result.traces.items():
+            out.append(_c(f"  --- traceback [{name}] ---\n{tb}", "31"))
     out.append(_c(f"  Completed in {result.duration_ms:.0f} ms", "90"))
     out.append(bar)
     return "\n".join(out)

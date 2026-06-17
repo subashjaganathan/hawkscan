@@ -22,6 +22,9 @@ full = [
     "yara-python>=4.3.0",
     "oletools>=0.60",
 ]
+dev = [
+    "pytest>=7.0",
+]
 
 [project.scripts]
 hawkscan = "hawkscan.cli:main"

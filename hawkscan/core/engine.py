@@ -21,6 +21,8 @@ class ScanResult:
     analyzers_run: list[str] = field(default_factory=list)
     analyzers_skipped: dict[str, str] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)
+    traces: dict[str, str] = field(default_factory=dict)  # full tracebacks (debug)
+    raw_score: int = 0  # pre-cap score, for transparency
     duration_ms: float = 0.0
 
     @property
@@ -35,8 +37,8 @@ class ScanResult:
             return "medium"
         return "low"
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
+    def to_dict(self, include_traces: bool = False) -> dict[str, Any]:
+        d = {
             "file": {
                 "path": str(self.info.path),
                 "size": self.info.size,
@@ -51,6 +53,7 @@ class ScanResult:
             },
             "verdict": self.verdict.label,
             "score": self.score,
+            "raw_score": self.raw_score,
             "confidence": self.confidence,
             "findings": [f.to_dict() for f in self.findings],
             "analyzers_run": self.analyzers_run,
@@ -58,15 +61,46 @@ class ScanResult:
             "errors": self.errors,
             "duration_ms": round(self.duration_ms, 1),
         }
+        if include_traces and self.traces:
+            d["traces"] = self.traces
+        return d
+
+
+# Files larger than this are hashed/identified but skip the deep (full-read)
+# analyzers, to bound memory and time. Override via Engine(max_scan_size=...).
+DEFAULT_MAX_SCAN_SIZE = 256 * 1024 * 1024  # 256 MiB
+
+# No single category may contribute more than this to the score. Stops a broad
+# ruleset matching many rules of one theme from trivially maxing the verdict.
+CATEGORY_SCORE_CAP = 120
+
+# Per-user allowlist of known-good SHA-256 hashes (one per line, '#' comments).
+_ALLOWLIST_PATH = Path.home() / ".hawkscan" / "allowlist.txt"
+
+
+def _load_allowlist() -> set[str]:
+    try:
+        lines = _ALLOWLIST_PATH.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+    out = set()
+    for ln in lines:
+        ln = ln.split("#", 1)[0].strip().lower()
+        if len(ln) == 64:
+            out.add(ln)
+    return out
 
 
 class Engine:
-    def __init__(self, analyzers: list | None = None, rules_dir: Path | None = None):
+    def __init__(self, analyzers: list | None = None, rules_dir: Path | None = None,
+                 max_scan_size: int = DEFAULT_MAX_SCAN_SIZE):
         # Imported here to avoid a circular import at module load.
         from ..analyzers import ALL_ANALYZERS
 
         self.analyzer_classes = analyzers if analyzers is not None else ALL_ANALYZERS
         self.rules_dir = rules_dir
+        self.max_scan_size = max_scan_size
+        self.allowlist = _load_allowlist()
 
     def scan(self, path: str | Path) -> ScanResult:
         start = time.perf_counter()
@@ -75,6 +109,33 @@ class Engine:
             raise FileNotFoundError(f"Not a file: {path}")
 
         info = fileinfo.inspect(path)
+        result = ScanResult(info=info)
+
+        # Known-good allowlist short-circuits everything.
+        if info.sha256 in self.allowlist:
+            result.findings.append(Finding(
+                analyzer="allowlist", title="Hash is on the known-good allowlist",
+                severity=Severity.INFO, category="allowlist",
+                detail="SHA-256 matched an entry in ~/.hawkscan/allowlist.txt.",
+            ))
+            result.verdict = Verdict.CLEAN
+            result.duration_ms = (time.perf_counter() - start) * 1000
+            return result
+
+        # Oversized files: identify only, skip the full-read analyzers.
+        if info.size > self.max_scan_size:
+            result.findings.append(Finding(
+                analyzer="engine", title="File too large for deep analysis",
+                severity=Severity.INFO, category="coverage",
+                detail=f"{info.size:,} bytes exceeds the {self.max_scan_size:,}-byte "
+                       "scan limit; only hashing/identification was performed. "
+                       "Raise with --max-size.",
+            ))
+            if info.ext_mismatch:
+                result.findings.append(self._mismatch_finding(info))
+            result.duration_ms = (time.perf_counter() - start) * 1000
+            return result
+
         ctx_content = None
         if info.size <= 64 * 1024 * 1024:
             ctx_content = path.read_bytes()
@@ -84,23 +145,9 @@ class Engine:
         ctx = AnalysisContext(info=info, content=ctx_content)
         ctx.cache["rules_dir"] = self.rules_dir
 
-        result = ScanResult(info=info)
-
         # An extension/type mismatch is itself a finding (masquerading).
         if info.ext_mismatch:
-            result.findings.append(
-                Finding(
-                    analyzer="fileinfo",
-                    title="File extension does not match content",
-                    severity=Severity.MEDIUM,
-                    category="masquerading",
-                    detail=(
-                        f"Extension '{info.extension}' but content is "
-                        f"{info.file_type} ({info.description}). Mislabeled files "
-                        "are a common delivery trick."
-                    ),
-                )
-            )
+            result.findings.append(self._mismatch_finding(info))
 
         for cls in self.analyzer_classes:
             inst = cls()
@@ -117,9 +164,50 @@ class Engine:
                 result.analyzers_run.append(cls.name)
             except Exception as exc:  # one analyzer must never sink the scan
                 result.errors[cls.name] = f"{type(exc).__name__}: {exc}"
-                result.errors[cls.name + ":trace"] = traceback.format_exc()
+                result.traces[cls.name] = traceback.format_exc()
 
-        result.score = sum(int(f.severity) for f in result.findings)
+        result.findings = self._dedup(result.findings)
+        result.raw_score, result.score = self._score(result.findings)
         result.verdict = score_to_verdict(result.score)
         result.duration_ms = (time.perf_counter() - start) * 1000
         return result
+
+    @staticmethod
+    def _mismatch_finding(info: "fileinfo.FileInfo") -> Finding:
+        return Finding(
+            analyzer="fileinfo",
+            title="File extension does not match content",
+            severity=Severity.MEDIUM,
+            category="masquerading",
+            detail=(
+                f"Extension '{info.extension}' but content is {info.file_type} "
+                f"({info.description}). Mislabeled files are a common delivery trick."
+            ),
+        )
+
+    @staticmethod
+    def _dedup(findings: list[Finding]) -> list[Finding]:
+        """Drop exact-duplicate findings (same analyzer+title) so identical
+        evidence isn't double-counted toward the score."""
+        seen: set[tuple[str, str]] = set()
+        out: list[Finding] = []
+        for f in findings:
+            key = (f.analyzer, f.title)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(f)
+        return out
+
+    @staticmethod
+    def _score(findings: list[Finding]) -> tuple[int, int]:
+        """Return (raw_score, capped_score). Each category's contribution is
+        capped so one theme (e.g. many YARA signature hits) can't alone run the
+        score to absurd values, while still allowing it to reach 'malicious'."""
+        raw = 0
+        per_cat: dict[str, int] = {}
+        for f in findings:
+            raw += int(f.severity)
+            per_cat[f.category] = per_cat.get(f.category, 0) + int(f.severity)
+        capped = sum(min(v, CATEGORY_SCORE_CAP) for v in per_cat.values())
+        return raw, capped

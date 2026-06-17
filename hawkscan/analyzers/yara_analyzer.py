@@ -7,6 +7,7 @@ weight; otherwise matches default to HIGH.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Iterable
 
@@ -86,12 +87,41 @@ class YaraAnalyzer(Analyzer):
         if not sources:
             return None
 
-        key = "|".join(sorted(sources.values()))
+        # Fingerprint the rule set by path + size + mtime so the on-disk cache
+        # is invalidated automatically whenever any rule file changes.
+        fp = hashlib.sha256()
+        for path in sorted(sources.values()):
+            st = Path(path).stat()
+            fp.update(f"{path}|{st.st_size}|{int(st.st_mtime)}".encode())
+        key = fp.hexdigest()
+
         if key in _compiled_cache:
             return _compiled_cache[key]
 
+        # On-disk compiled cache: turns the ~2s compile of a large ruleset into
+        # a ~10ms load on every subsequent process invocation.
+        cache_path = self._cache_path(key)
+        if cache_path is not None and cache_path.exists():
+            try:
+                compiled = yara.load(str(cache_path))
+                _compiled_cache[key] = compiled
+                return compiled
+            except yara.Error:
+                cache_path.unlink(missing_ok=True)  # corrupt cache; recompile
+
+        compiled = self._compile_sources(sources)
+        if compiled is not None and cache_path is not None:
+            try:
+                compiled.save(str(cache_path))
+            except yara.Error:
+                pass  # caching is best-effort; never fail a scan over it
+        _compiled_cache[key] = compiled
+        return compiled
+
+    @staticmethod
+    def _compile_sources(sources: dict[str, str]):
         try:
-            compiled = yara.compile(filepaths=sources)
+            return yara.compile(filepaths=sources)
         except yara.Error:
             # Community rulesets occasionally contain a file that won't compile
             # (missing module/external). Fall back to per-file so one bad file
@@ -103,9 +133,18 @@ class YaraAnalyzer(Analyzer):
                     good[ns] = path
                 except yara.Error:
                     continue
-            compiled = yara.compile(filepaths=good) if good else None
-        _compiled_cache[key] = compiled
-        return compiled
+            return yara.compile(filepaths=good) if good else None
+
+    @staticmethod
+    def _cache_path(key: str) -> Path | None:
+        from ..core.rules_update import USER_RULES_DIR
+
+        cache_dir = USER_RULES_DIR.parent / "compiled"
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return None
+        return cache_dir / f"{key}.yarac"
 
     def analyze(self, ctx: AnalysisContext) -> Iterable[Finding]:
         custom = ctx.cache.get("rules_dir")

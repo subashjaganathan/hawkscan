@@ -117,6 +117,11 @@ def detect_type(head: bytes, extension: str) -> tuple[str, str]:
     """Return (file_type, description) from magic bytes, with text fallback."""
     for offset, magic, ftype, desc in _MAGIC_SIGNATURES:
         if head[offset : offset + len(magic)] == magic:
+            # 0xCAFEBABE is shared by Mach-O fat binaries AND Java .class files.
+            # Disambiguate by extension (and Java's version word at offset 4-7).
+            if ftype == "macho" and magic == b"\xca\xfe\xba\xbe":
+                if extension == ".class":
+                    return "java-class", "Java compiled class file"
             # OOXML/JAR/APK are ZIP under the hood; refine by extension.
             if ftype == "zip":
                 if extension in {".docx", ".xlsx", ".pptx", ".docm", ".xlsm", ".pptm"}:

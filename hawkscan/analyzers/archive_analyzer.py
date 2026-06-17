@@ -27,8 +27,10 @@ class ArchiveAnalyzer(Analyzer):
 
     def analyze(self, ctx: AnalysisContext) -> Iterable[Finding]:
         try:
-            zf = zipfile.ZipFile(ctx.path)
-            infos = zf.infolist()
+            # Only metadata is needed; ZipInfo objects stay valid after close,
+            # so read the listing inside the context manager and release the handle.
+            with zipfile.ZipFile(ctx.path) as zf:
+                infos = zf.infolist()
         except Exception as exc:
             yield Finding(analyzer=self.name, title="Unreadable ZIP structure",
                           severity=Severity.LOW, category="format",
@@ -81,4 +83,3 @@ class ArchiveAnalyzer(Analyzer):
                 category="dos",
                 detail="Possible decompression bomb.",
             )
-        zf.close()

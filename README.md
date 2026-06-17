@@ -117,13 +117,41 @@ Drop additional `.yar` files into `hawkscan/rules/` (or point `--rules` at your
 own directory). A rule may set `meta.severity` (`info|low|medium|high|critical`)
 and `meta.category`/`meta.description` to control how it scores and reads.
 
-## Known limitations (v1)
+## Reducing false positives
 
+- **Allowlist known-good files.** Put SHA-256 hashes (one per line, `#` for
+  comments) in `~/.hawkscan/allowlist.txt`; matching files are reported Clean
+  immediately.
+- **Score capping.** No single category (e.g. many YARA signature hits of one
+  theme) can dominate the verdict; the report shows the raw vs. capped score.
+- **Duplicate evidence is de-duplicated** before scoring.
+
+## Performance & limits
+
+- Compiled YARA rules are cached on disk (`~/.hawkscan/compiled/`), so large
+  rulesets compile once and load in milliseconds thereafter.
+- Files larger than 256 MiB are hashed/identified but skip deep analysis
+  (override with `--max-size MB`).
+
+## Testing
+
+```bash
+pip install -e ".[dev]"
+pytest -q
+```
+
+CI runs the core test suite on Linux + Windows across Python 3.11–3.13 with no
+optional dependencies, enforcing the "runs on stock Python" contract.
+
+## Known limitations
+
+- No dynamic/sandbox execution — this is a static + heuristic engine, so it
+  cannot see behavior that only appears at runtime (packed/encrypted/fileless).
+- A "Clean" verdict means "no static red flags found," not "guaranteed safe."
 - Signature check detects *embedded* Authenticode only; catalog-signed Windows
   binaries show as "not signed" (low-severity note, never a malicious verdict).
 - Archives are inspected at the member-listing level; contents are not yet
   recursively scanned.
-- No dynamic/sandbox execution — this is a static + heuristic engine.
 
 ## License
 

@@ -52,16 +52,21 @@ _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern, str, Severity, str]] = [
 
 
 def extract_strings(data: bytes, min_len: int = 4, limit: int = 200_000):
+    """Return (strings, truncated). `truncated` is True if the limit was hit."""
     out: list[str] = []
+    truncated = False
     for m in _ASCII_RE.finditer(data):
         out.append(m.group().decode("ascii", "ignore"))
         if len(out) >= limit:
+            truncated = True
             break
-    for m in _UTF16_RE.finditer(data):
-        out.append(m.group().decode("utf-16le", "ignore"))
-        if len(out) >= limit:
-            break
-    return out
+    if not truncated:
+        for m in _UTF16_RE.finditer(data):
+            out.append(m.group().decode("utf-16le", "ignore"))
+            if len(out) >= limit:
+                truncated = True
+                break
+    return out, truncated
 
 
 class StringsAnalyzer(Analyzer):
@@ -72,9 +77,19 @@ class StringsAnalyzer(Analyzer):
 
     def analyze(self, ctx: AnalysisContext) -> Iterable[Finding]:
         data = ctx.read_all()
-        strings = extract_strings(data)
+        strings, truncated = extract_strings(data)
         blob = "\n".join(strings)
         ctx.cache["strings"] = strings  # let other analyzers reuse
+
+        if truncated:
+            yield Finding(
+                analyzer=self.name,
+                title="String extraction truncated",
+                severity=Severity.INFO,
+                category="coverage",
+                detail=f"Stopped after {len(strings):,} strings; indicators beyond "
+                       "this point were not scanned.",
+            )
 
         # Capability / behavior indicators.
         seen: set[str] = set()

@@ -31,11 +31,16 @@ def _entropy(s: str) -> float:
 class ScriptAnalyzer(Analyzer):
     name = "script"
 
+    # Extensions that are unambiguously scripts. Plain ".txt"/".log" are
+    # intentionally excluded: running obfuscation heuristics on arbitrary text
+    # produced false positives (a log line with a long base64 token, etc.).
+    _SCRIPT_EXTS = {
+        ".ps1", ".psm1", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse",
+        ".wsf", ".hta", ".sh", ".py", ".pl", ".rb", ".php",
+    }
+
     def applies(self, ctx: AnalysisContext) -> bool:
-        return ctx.info.file_type in {"script", "text"} or ctx.info.extension in {
-            ".ps1", ".psm1", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse",
-            ".wsf", ".hta", ".sh", ".py", ".pl",
-        }
+        return ctx.info.file_type == "script" or ctx.info.extension in self._SCRIPT_EXTS
 
     def analyze(self, ctx: AnalysisContext) -> Iterable[Finding]:
         try:
