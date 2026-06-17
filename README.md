@@ -161,6 +161,16 @@ decision and tune the thresholds in one place.
 
 The capability and MITRE ATT&CK output gives you a quick behavioural profile of a
 binary: what it can do, and which adversary techniques those abilities map to.
+The API database covers 140+ Windows/Linux functions across injection,
+networking, persistence, discovery, credential access and evasion.
+
+### Built-in rules
+
+HawkScan ships with original YARA rules covering common malware classes and
+techniques: infostealers (browser/wallet/Discord-token theft), crypto miners,
+anti-VM and UAC-bypass markers, LSASS credential dumping, persistence locations,
+ransomware behaviour, reverse shells, keyloggers, packers, and Meterpreter/Cobalt
+Strike indicators. Run `--update-rules` to add the YARA-Forge community set on top.
 
 ## Dynamic analysis (optional, VM only)
 

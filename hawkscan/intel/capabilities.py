@@ -180,6 +180,47 @@ API_DB: dict[str, tuple[str, str, str]] = {
     "DeleteFileA": _T("File System", "T1070.004", "File Deletion"),
     "MoveFileExA": _T("File System", "", ""),
     "FindFirstFileA": _T("File System", "T1083", "File and Directory Discovery"),
+    "FindNextFileA": _T("File System", "T1083", "File and Directory Discovery"),
+    "SetFileAttributesA": _T("File System", "T1564.001", "Hidden Files and Directories"),
+
+    # --- Additional injection / memory primitives ---
+    "NtWriteVirtualMemory": _T("Process Injection", "T1055", "Process Injection"),
+    "NtMapViewOfSection": _T("Process Injection", "T1055", "Process Injection"),
+    "NtProtectVirtualMemory": _T("Process Injection", "T1055", "Process Injection"),
+    "NtQueueApcThread": _T("Process Injection", "T1055.004", "Asynchronous Procedure Call"),
+    "GlobalAddAtomA": _T("Process Injection", "T1055.014", "Atom Bombing"),
+    "ResumeThread": _T("Process / Thread Manipulation", "T1055.012", "Process Hollowing"),
+
+    # --- Additional networking ---
+    "HttpSendRequestW": _T("Networking", "T1071.001", "Web Protocols"),
+    "WSAConnect": _T("Networking", "T1095", "Non-Application Layer Protocol"),
+    "DnsQuery_A": _T("Networking", "T1071.004", "DNS"),
+    "InternetSetOptionA": _T("Networking", "T1071.001", "Web Protocols"),
+    "WSASend": _T("Networking", "T1071", "Application Layer Protocol"),
+
+    # --- Defense evasion ---
+    "RtlAddVectoredExceptionHandler": _T("Anti-Debug / Anti-Analysis", "T1622", "Debugger Evasion"),
+    "GetThreadContext": _T("Anti-Debug / Anti-Analysis", "T1622", "Debugger Evasion"),
+    "NtSetInformationThread": _T("Anti-Debug / Anti-Analysis", "T1622", "Debugger Evasion"),
+    "BlockInput": _T("Anti-Debug / Anti-Analysis", "T1497", "Virtualization/Sandbox Evasion"),
+    "EnumDeviceDrivers": _T("Anti-VM / Sandbox Evasion", "T1497.001", "System Checks"),
+
+    # --- Discovery ---
+    "GetAdaptersInfo": _T("System Discovery", "T1016", "System Network Configuration Discovery"),
+    "NetUserEnum": _T("System Discovery", "T1087", "Account Discovery"),
+    "RegEnumKeyExA": _T("Registry", "T1012", "Query Registry"),
+    "GetForegroundWindow": _T("System Discovery", "T1010", "Application Window Discovery"),
+    "GetNativeSystemInfo": _T("System Discovery", "T1082", "System Information Discovery"),
+
+    # --- Privilege escalation / credential ---
+    "LookupPrivilegeValueA": _T("Privilege Escalation", "T1134", "Access Token Manipulation"),
+    "CreateProcessAsUserA": _T("Privilege Escalation", "T1134.002", "Create Process with Token"),
+    "CredReadA": _T("Credential Access", "T1555", "Credentials from Password Stores"),
+    "LsaEnumerateLogonSessions": _T("Credential Access", "T1003", "OS Credential Dumping"),
+
+    # --- Service manipulation ---
+    "ChangeServiceConfig2A": _T("Service Manipulation", "T1543.003", "Windows Service"),
+    "ControlService": _T("Service Manipulation", "T1543.003", "Windows Service"),
 }
 
 # Normalised lookup (lowercased, A/W/Ex suffixes folded).

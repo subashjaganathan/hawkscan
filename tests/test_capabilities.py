@@ -49,3 +49,14 @@ def test_single_common_api_does_not_trigger_injection_combo():
 def test_keylogging_combo_single_api():
     hits = cap.detect_combinations({"GetAsyncKeyState"})
     assert any(h["name"] == "Keylogging" for h in hits)
+
+
+def test_expanded_api_coverage():
+    # Spot-check APIs added in the coverage expansion.
+    caps, techs = cap.categorize(
+        ["NtWriteVirtualMemory", "DnsQuery_A", "CredReadA", "GetAdaptersInfo"])
+    assert "Process Injection" in caps
+    assert "Networking" in caps
+    assert "Credential Access" in caps
+    assert "System Discovery" in caps
+    assert len(cap.API_DB) >= 130
