@@ -1,63 +1,77 @@
 # HawkScan
 
-HawkScan is an offline, explainable malware triage scanner. You point it at any
-file, of any type, on any operating system, and it tells you whether the file
-looks malicious and, more importantly, exactly why.
+HawkScan is an offline, explainable malware triage scanner. Point it at any file,
+of any type, on any operating system, and it tells you whether the file looks
+malicious and, more importantly, exactly why.
 
-It is deliberately different from services like VirusTotal. It does not upload
-your files anywhere, it does not aggregate third party antivirus engines, and
-it works completely offline. Instead it parses the file itself, runs structural,
-heuristic and signature based checks, and returns a weighted, auditable verdict
-that you can defend line by line.
+It is deliberately different from cloud services such as VirusTotal. By default it
+does not upload your files anywhere, does not depend on third party antivirus
+engines, and works completely offline. It parses the file itself, runs structural,
+heuristic, capability and signature based checks, and returns a weighted,
+auditable verdict you can defend finding by finding.
+
+## Highlights
+
+- 20 analyzers covering Windows, Linux, macOS, Android, iOS, documents, archives,
+  email, network captures and cloud artefacts.
+- Capability categorisation mapped to MITRE ATT&CK techniques.
+- Unpacking and deobfuscation layer that recovers and re-scans hidden payloads.
+- Explainable weighted verdict with built in false positive controls.
+- 63 original YARA rules across 9 packs, plus optional community rules.
+- Text, JSON and self contained HTML reports.
+- Optional, opt-in extras: dynamic sandbox analysis, VirusTotal lookup, AI summary
+  and a local web UI.
+- Zero required dependencies for the core engine. 93 automated tests, CI on Linux
+  and Windows.
 
 ## What it is and is not
 
-HawkScan performs static and heuristic analysis. It inspects a file without
-running it.
+HawkScan performs static and heuristic analysis by default. It inspects a file
+without running it (dynamic analysis is a separate, opt-in module).
 
 It does:
-- Identify the true file type and compute cryptographic hashes.
-- Parse the structure of common formats (Windows PE, Linux ELF, macOS Mach-O,
-  Office documents, PDF, scripts, archives).
-- Score suspicious traits and known signatures into a clear verdict.
+
+- Identify the true file type and compute cryptographic and fuzzy hashes.
+- Parse the structure of common formats and binaries.
+- Score suspicious traits, capabilities and signatures into a clear verdict.
 
 It does not:
-- Execute the file or observe its runtime behaviour (no sandbox).
-- Disassemble or decompile code.
-- Guarantee a file is safe. A Clean verdict means no static red flags were
-  found, not that the file is harmless.
 
-This makes it fast, safe to run on any machine, and fully explainable, which is
-exactly what you want for first pass triage.
+- Execute a file unless you explicitly opt in to the VM gated dynamic module.
+- Guarantee a file is safe. A Clean verdict means no static red flags were found,
+  not that the file is harmless.
 
-## How to install
+## Installation
 
 The core engine has no required dependencies and runs on a stock Python 3.9 or
 newer install. Optional libraries unlock deeper analysis and are detected
 automatically when present.
 
 ```bash
-# Core only
+# Core only (works anywhere)
 pip install -e .
 
-# Full analysis (PE imports, YARA matching, Office macro extraction)
+# Full static analysis (PE imports, YARA, Office macros)
 pip install -e ".[full]"
+
+# Optional dynamic analysis tooling (psutil, frida)
+pip install -e ".[dynamic]"
+
+# Optional fuzzy hashing
+pip install tlsh
 ```
 
 If an optional library is missing, the matching analyzer is skipped with a note
 rather than failing the scan.
 
-## How to run it
+## Usage
 
 ```bash
-# Scan a single file
-hawkscan suspicious.exe
+# Scan one or more files
+hawkscan suspicious.exe invoice.pdf
 
-# Scan several files at once
-hawkscan file1.dll invoice.pdf script.ps1
-
-# Scan a folder, including subfolders
-hawkscan -r ./downloads
+# Scan a folder, recursively, in parallel
+hawkscan -r ./downloads --jobs 8
 
 # Show only files that are at least suspicious
 hawkscan -r ./downloads --min-verdict suspicious
@@ -65,161 +79,130 @@ hawkscan -r ./downloads --min-verdict suspicious
 # Machine readable output for pipelines
 hawkscan sample.bin --json
 
-# Write a self-contained HTML report
+# Self contained HTML report
 hawkscan sample.bin --html report.html
-
-# Return a non-zero exit code for automation or CI gates
-hawkscan -r ./build --fail-on likely_malicious
-
-# Use an additional directory (or whole tree) of YARA rules.
-# --rules recurses, so you can point it at a nested rule collection. The rules
-# are loaded at scan time from wherever they live, under their own license.
-hawkscan --rules ./my_rules sample.bin
-hawkscan --rules /path/to/rule/tree sample.bin
 
 # Carve embedded files (hidden PE/ELF/ZIP) out of a carrier
 hawkscan dropper.pdf --extract ./carved
+
+# Hash only lookup against the local allowlist/denylist/hash DB
+hawkscan --hashscan suspicious.exe
+
+# Import threat intel hashes into the local database
+hawkscan --import-hashes iocs.txt --label "Emotet"
+
+# Use an additional directory or tree of YARA rules
+hawkscan --rules ./my_rules sample.bin
+
+# Continuous integration gate (non zero exit at or above a band)
+hawkscan -r ./build --fail-on likely_malicious
 ```
 
-If you have not installed it as a command yet, you can always run it as a
-module from the project folder:
+Run as a module without installing:
 
 ```bash
 python -m hawkscan <file>
 ```
 
-### Updating the signature set
+### Updating community rules
 
-HawkScan ships with a small set of built in YARA rules. To raise real world
-coverage, download the community YARA-Forge ruleset (thousands of rules). The
-rules are cached per user and picked up automatically on the next scan.
+HawkScan ships with 63 original YARA rules. To add the community YARA-Forge set
+(thousands of rules, cached per user, never committed to the repository):
 
 ```bash
 hawkscan --update-rules            # core tier, highest confidence
 hawkscan --update-rules extended   # broader coverage
-hawkscan --update-rules full       # everything, higher false positive rate
 ```
 
 ## How to read the result
 
-Every scan prints the file identity, a verdict, a score, a confidence level, and
-the evidence behind the verdict.
-
 ```
-VERDICT: MALICIOUS   (score 145 (capped from 300), confidence high)
+VERDICT: MALICIOUS   (score 250, confidence high)
 
 Evidence:
- [High    ] (script/execution) PowerShell Invoke-Expression
- [High    ] (yara/execution)   YARA rule match: download and execute cradle
- [Medium  ] (strings/network)  Network download primitive
+ [High    ] (capability/Process Injection) Classic process injection
+ [High    ] (yara/c2)                       YARA rule match: Cobalt Strike beacon
+ [Medium  ] (strings/network)               Network download primitive
+
+Capabilities:
+ - Process Injection: WriteProcessMemory 0x..., CreateRemoteThread 0x...
+
+MITRE ATT&CK:
+ - T1055   Process Injection
+ - T1056.001  Keylogging
 ```
 
 - Verdict is the bottom line: Clean, Low Risk, Suspicious, Likely Malicious or
   Malicious.
-- Score is the total weight of all evidence.
+- Score is the total weight of all evidence (capped per category so one theme
+  cannot dominate).
 - Confidence reflects how strong and corroborated the evidence is.
-- Evidence lists each finding with its analyzer, category and reason, so the
-  verdict is never a black box.
+- Evidence, capabilities and ATT&CK techniques are listed so the verdict is never
+  a black box.
 
 ## How it works
 
-Each file goes through five stages.
+Each file goes through five stages: identify (hash and true type), route to the
+relevant analyzers, analyze (each emits weighted findings), score (sum the
+weights with de-duplication and per category caps), and verdict (map the score to
+a band and show all the evidence). Because the verdict is the sum of named
+findings, every decision is auditable and the thresholds are tuned in one place.
 
-1. Identify. The file is hashed (MD5, SHA1, SHA256) and its true type is
-   detected from magic bytes, not from the extension. A file whose extension
-   disagrees with its real content is flagged as masquerading.
-2. Route. Based on the real type, the file is sent to the relevant analyzers.
-3. Analyze. Each analyzer looks for its own indicators and emits findings. Every
-   finding carries a severity weight (Info, Low, Medium, High, Critical).
-4. Score. The weights are summed. Identical findings are de-duplicated, and no
-   single category can dominate the verdict (the report shows the raw and the
-   capped score for transparency).
-5. Verdict. The capped score maps to a verdict band, and all evidence is shown.
-
-Because the verdict is simply the sum of named findings, you can audit every
-decision and tune the thresholds in one place.
-
-## What it implements
+## Analyzers
 
 | Analyzer | What it looks for |
 |----------|-------------------|
-| File identity | Hashes, true type, extension versus content mismatch |
-| Entropy | Packing, encryption or compression via Shannon entropy |
-| Strings | Embedded URLs and IPs, download and execution primitives, persistence, ransomware and spyware indicators |
-| PE | Dangerous Windows API imports, packer sections, section entropy, missing signature |
-| ELF | Architecture, ptrace anti debugging, LD_PRELOAD and cron persistence |
-| Mach-O | File type, missing code signature, LaunchAgent and LaunchDaemon persistence |
-| Office | VBA macros, auto execute triggers, shell and download calls inside macros, encrypted/password-protected documents, and OneNote embedded-file droppers |
-| PDF | JavaScript, OpenAction, Launch actions, embedded files, name obfuscation |
-| Script | Base64 payloads, character code obfuscation, dynamic execution, hidden window flags |
-| Archive | Double extension lures, encrypted archives, decompression bombs, executable members |
-| PCAP | Network-capture analysis: contacted IPs, DNS queries, HTTP hosts, suspicious-TLD and DGA-like domains, and cleartext credentials in traffic |
-| Email | EML/RFC 822 analysis: SPF/DKIM/DMARC failures, From vs Return-Path/Reply-To spoofing, risky and double-extension attachments, attachments that decode to executables |
-| Android | APK and DEX analysis: categorizes requested permissions (high-risk, dangerous) and flags suspicious APIs (SMS fraud, dynamic code loading, accessibility abuse, device-admin, IMEI/IMSI theft, command execution) |
-| Capability | Groups imported APIs into behavioural categories (networking, injection, keylogging, persistence...) and maps them to MITRE ATT&CK techniques. The category inventory is informational; high confidence API combinations (such as the process injection triad) drive the score |
-| RTF | Detects embedded OLE objects, auto-updating objects, and exploit carriers (Equation Editor CVE-2017-11882/0802, OLE2Link CVE-2017-0199, Packager droppers) |
-| Binary profile | Identifies the compiler/runtime of a binary (Go, .NET, Rust, Nim, PyInstaller, AutoIt) to focus follow-up analysis |
-| Carver | Finds and extracts executables and archives (PE/ELF/ZIP/...) embedded at a non-zero offset inside a carrier file, a common dropper technique. Embedded PEs are sized from their headers so extraction captures the whole payload |
-| YARA | Signature matching from the built in and community rule sets |
+| File identity | Hashes (MD5/SHA1/SHA256), fuzzy hash (TLSH), true type, extension/content mismatch |
+| Entropy | Packing, encryption or compression |
+| Strings | Embedded URLs/IPs, download and execution primitives, persistence, ransomware and spyware indicators |
+| Secrets and cloud | Leaked AWS/GCP/Azure credentials, private keys, tokens, IMDS theft, container escape, Kubernetes and cloud exfil abuse |
+| PE (Windows) | Imports with addresses, sections and entropy, packers, signature verification (embedded and catalog), overlay, resources, version info, imphash, rich header, TLS callbacks |
+| .NET | CLR metadata parsing, IL user strings, symbol obfuscation detection |
+| ELF (Linux) | Architecture, ptrace anti debugging, persistence and rootkit indicators |
+| Mach-O (macOS) | File type, code signature, persistence indicators |
+| Capability | Groups 149 APIs into behavioural categories and maps them to MITRE ATT&CK |
+| Binary profile | Compiler/runtime detection (Go, .NET, Rust, Nim, PyInstaller, AutoIt) |
+| Office | VBA macros, auto execute, encrypted documents, OneNote droppers |
+| PDF | JavaScript, OpenAction, Launch, embedded files, obfuscation |
+| RTF | Embedded OLE objects, Equation Editor and OLE2Link exploits, Packager droppers |
+| Script | Base64/hex payloads, obfuscation, dynamic execution |
+| Archive | Double extension lures, encrypted archives, decompression bombs |
+| Email | EML headers (SPF/DKIM/DMARC), sender spoofing, malicious attachments |
+| PCAP | Contacted IPs, DNS queries, HTTP hosts, suspicious TLD and DGA domains, cleartext credentials |
+| Android / iOS | APK/DEX permissions and suspicious APIs, iOS app package detection |
+| Carver | Finds and extracts executables and archives embedded inside a carrier |
+| Deobfuscation | Unpacks UPX and decodes base64/hex layers, then re-scans the recovered payload |
+| YARA | Signature matching from the bundled and optional community rule sets |
 
-The capability and MITRE ATT&CK output gives you a quick behavioural profile of a
-binary: what it can do, and which adversary techniques those abilities map to.
-The API database covers 140+ Windows/Linux functions across injection,
-networking, persistence, discovery, credential access and evasion.
+## Detection content
 
-### Built-in rules
-
-HawkScan ships with original YARA rules covering common malware classes and
-techniques: infostealers (browser/wallet/Discord-token theft), crypto miners,
-anti-VM and UAC-bypass markers, LSASS credential dumping, persistence locations,
-ransomware behaviour, reverse shells, keyloggers, packers, and Meterpreter/Cobalt
-Strike indicators. Run `--update-rules` to add the YARA-Forge community set on top.
-
-## Dynamic analysis (optional, VM only)
-
-HawkScan is static by default and never runs a file. An optional behavioural
-module can execute a sample and observe what it does (child processes, dropped
-files, network connections). Process and network detail improve if `psutil` is
-installed.
-
-WARNING: this executes the sample. Use it ONLY inside a disposable, snapshotted
-analysis VM with controlled networking. It refuses to run unless you set
-`HAWKSCAN_SANDBOX=1`, which you should set only in such a VM, never on a
-workstation.
-
-```bash
-# Inside a throwaway analysis VM only:
-export HAWKSCAN_SANDBOX=1
-hawkscan sample.exe --dynamic --detonate --dynamic-timeout 30
-```
-
-Both `--dynamic` and `--detonate` are required to actually run a sample, and the
-process tree is killed when the timeout elapses.
-
-Tracers (`--dynamic-method`, default `auto`):
-
-- `monitor` - process tree, dropped files, network (psutil optional)
-- `strace` - Linux syscall tracing (file/network/process)
-- `frida` - cross-platform API hooking (requires the `frida` package)
-- `adb` - Android: installs the APK on a connected emulator, captures logcat
-
-`auto` picks the best available tracer for the file type and platform, falling
-back to `monitor`.
+63 original YARA rules across 9 packs: Windows techniques, Linux/ELF, macOS,
+mobile (Android and iOS), cloud, malicious documents, behaviours and families
+(infostealers, ransomware, miners, RATs, webshells, Cobalt Strike and more). The
+capability database maps 149 Windows and Linux APIs to MITRE ATT&CK techniques.
+Community coverage is available on demand via `--update-rules` (YARA-Forge) or by
+pointing `--rules` at any rule tree.
 
 ## Reducing false positives
 
-- Allowlist known good files by putting their SHA256 hashes (one per line) in
-  `~/.hawkscan/allowlist.txt`. Matching files are reported Clean immediately.
-- Per category score capping prevents one theme of evidence from maxing the
-  verdict on its own.
-- Duplicate evidence is removed before scoring.
+- Allowlist known good files by SHA-256 in `~/.hawkscan/allowlist.txt`.
+- Denylist or label known bad hashes in `~/.hawkscan/denylist.txt` and
+  `~/.hawkscan/hashdb.txt`.
+- Per category score capping and duplicate evidence removal keep one theme from
+  inflating the verdict.
 
-## Performance
+## Optional, opt-in features
 
-- Compiled YARA rules are cached on disk, so large rule sets compile once and
-  load in milliseconds on later scans.
-- Files larger than 256 MiB are identified but skip deep analysis. Override the
-  limit with `--max-size MB`.
+These are off by default and never affect the offline core.
+
+- Dynamic analysis (`--dynamic`): runs the sample under observation. VM gated;
+  requires `HAWKSCAN_SANDBOX=1` plus `--detonate`. Tracers: monitor, strace,
+  Frida API hooking, and ADB for Android. See `docs/dynamic-analysis.md`.
+- VirusTotal (`--vt`): reputation lookup by hash only; the file is never
+  uploaded. Requires `VT_API_KEY`.
+- AI summary (`--ai`): plain language analyst summary. Requires the anthropic
+  package and an API key.
+- Web UI (`--ui`): local, offline drag and drop scanning at 127.0.0.1.
 
 ## Testing
 
@@ -228,17 +211,17 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-The test suite runs against the core engine with no optional dependencies, on
-Linux and Windows across Python 3.11 to 3.13, through continuous integration.
+93 tests run on Linux and Windows across Python 3.11 to 3.13 through continuous
+integration, including an end to end detection regression corpus and rule compile
+guards. A benchmark harness (`tools/benchmark.py`) measures precision and recall
+against a labelled malicious/benign corpus.
 
 ## Limitations
 
-- Static only. It cannot see behaviour that appears only at runtime, such as
-  packed, encrypted or fileless payloads. A sandbox would be required for that.
-- Signature checking covers embedded Authenticode only, so some validly signed
-  Windows binaries are reported as unsigned at low severity.
-- Archives are inspected at the member listing level. Their contents are not yet
-  scanned recursively.
+- Static by default. Behaviour that appears only at runtime needs the opt-in
+  dynamic module in a VM.
+- Detection depth grows with use; validate accuracy against a real corpus with
+  `tools/benchmark.py` before relying on it operationally.
 
 ## License
 
