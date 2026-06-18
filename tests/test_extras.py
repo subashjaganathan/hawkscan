@@ -24,6 +24,22 @@ def test_ai_summarize_degrades_without_backend():
     assert out.startswith("[AI summary")
 
 
+def test_webui_safe_name_blocks_traversal():
+    assert webui.safe_name("../../../etc/passwd") == "passwd"
+    assert webui.safe_name(r"..\..\windows\system32\evil.dll") == "evil.dll"
+    assert webui.safe_name("") == "upload.bin"
+    assert webui.safe_name(None) == "upload.bin"
+    safe = webui.safe_name("normal.exe")
+    assert "/" not in safe and "\\" not in safe and ".." not in safe
+
+
+def test_config_defaults_and_thresholds():
+    from hawkscan.core import config
+    t = config.thresholds()
+    assert t["suspicious"] == 45 and t["malicious"] == 150
+    assert config.category_cap() == 120
+
+
 def test_webui_multipart_parse():
     boundary = "X"
     body = (

@@ -65,21 +65,30 @@ class Verdict(IntEnum):
         }[self]
 
 
-# Score thresholds (inclusive lower bound) -> verdict band.
-# Tuned so a single HIGH finding alone is "Suspicious", two HIGH or a CRITICAL
-# pushes toward malicious. Adjust in one place to retune the whole engine.
-VERDICT_THRESHOLDS: list[tuple[int, Verdict]] = [
-    (0, Verdict.CLEAN),
-    (15, Verdict.LOW_RISK),
-    (45, Verdict.SUSPICIOUS),
-    (90, Verdict.LIKELY_MALICIOUS),
-    (150, Verdict.MALICIOUS),
-]
+# Score thresholds (inclusive lower bound) -> verdict band. Defaults are tuned so
+# a single HIGH finding alone is "Suspicious", two HIGH or a CRITICAL pushes
+# toward malicious. Override via hawkscan.toml / ~/.hawkscan/config.toml.
+_BANDS = {
+    "clean": Verdict.CLEAN, "low_risk": Verdict.LOW_RISK,
+    "suspicious": Verdict.SUSPICIOUS, "likely_malicious": Verdict.LIKELY_MALICIOUS,
+    "malicious": Verdict.MALICIOUS,
+}
+
+
+def _thresholds() -> list[tuple[int, Verdict]]:
+    from . import config
+    t = config.thresholds()
+    return sorted(((t[name], band) for name, band in _BANDS.items()),
+                  key=lambda x: x[0])
+
+
+# Materialised once for callers that want the table directly.
+VERDICT_THRESHOLDS: list[tuple[int, Verdict]] = _thresholds()
 
 
 def score_to_verdict(score: int) -> Verdict:
     verdict = Verdict.CLEAN
-    for threshold, band in VERDICT_THRESHOLDS:
+    for threshold, band in _thresholds():
         if score >= threshold:
             verdict = band
     return verdict

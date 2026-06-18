@@ -2,6 +2,20 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.0.1]
+
+### Security
+- Web UI now sanitises uploaded filenames to a safe basename, preventing a
+  path-traversal write outside the temporary directory.
+
+### Added
+- Tunable configuration via `hawkscan.toml` / `~/.hawkscan/config.toml`
+  (verdict thresholds and per-category score cap); defaults unchanged.
+
+### Changed
+- File contents are read once and cached per scan, so large files are no longer
+  re-read by every analyzer.
+
 ## [1.0.0]
 
 First stable release. Consolidates the full feature set: 21 analyzers spanning

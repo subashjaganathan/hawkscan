@@ -80,7 +80,9 @@ DEFAULT_MAX_SCAN_SIZE = 256 * 1024 * 1024  # 256 MiB
 
 # No single category may contribute more than this to the score. Stops a broad
 # ruleset matching many rules of one theme from trivially maxing the verdict.
-CATEGORY_SCORE_CAP = 120
+# Overridable via hawkscan.toml ([scoring] category_cap).
+from . import config as _config  # noqa: E402
+CATEGORY_SCORE_CAP = _config.category_cap()
 
 # Per-user hash lists (SHA-256, one per line, '#' comments). The allowlist marks
 # known-good files (forced Clean); the denylist marks known-bad files (forced

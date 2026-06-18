@@ -1,0 +1,65 @@
+"""Optional tunable configuration.
+
+Verdict thresholds and the per-category score cap can be tuned without editing
+code by placing a `hawkscan.toml` in the working directory or
+`~/.hawkscan/config.toml`. Example:
+
+    [thresholds]
+    suspicious = 50
+    malicious = 160
+
+    [scoring]
+    category_cap = 100
+
+Requires Python 3.11+ for TOML parsing; on older versions the built-in defaults
+are used. Unknown keys are ignored, so a partial file only overrides what it sets.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+try:
+    import tomllib  # Python 3.11+
+    _HAVE_TOML = True
+except Exception:
+    _HAVE_TOML = False
+
+# Built-in defaults (the historical, tested values).
+_DEFAULT_THRESHOLDS = {
+    "clean": 0, "low_risk": 15, "suspicious": 45,
+    "likely_malicious": 90, "malicious": 150,
+}
+_DEFAULT_CATEGORY_CAP = 120
+
+
+def _load() -> dict:
+    thresholds = dict(_DEFAULT_THRESHOLDS)
+    category_cap = _DEFAULT_CATEGORY_CAP
+    if _HAVE_TOML:
+        for path in (Path.cwd() / "hawkscan.toml",
+                     Path.home() / ".hawkscan" / "config.toml"):
+            try:
+                with open(path, "rb") as fh:
+                    data = tomllib.load(fh)
+            except (OSError, ValueError):
+                continue
+            for k, v in (data.get("thresholds") or {}).items():
+                if k in thresholds and isinstance(v, int):
+                    thresholds[k] = v
+            cc = (data.get("scoring") or {}).get("category_cap")
+            if isinstance(cc, int):
+                category_cap = cc
+            break
+    return {"thresholds": thresholds, "category_cap": category_cap}
+
+
+_CONFIG = _load()
+
+
+def thresholds() -> dict:
+    return dict(_CONFIG["thresholds"])
+
+
+def category_cap() -> int:
+    return _CONFIG["category_cap"]

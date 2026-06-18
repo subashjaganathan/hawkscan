@@ -8,6 +8,7 @@ localhost by default. This does NOT run dynamic analysis.
 from __future__ import annotations
 
 import email
+import os
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -61,7 +62,9 @@ def _make_handler(engine: Engine):
             if content is None:
                 self._send("<p>No file uploaded. <a href='/'>back</a></p>", 400)
                 return
-            tmp = Path(tempfile.mkdtemp(prefix="hawkscan_ui_")) / (filename or "upload.bin")
+            # Never trust the uploaded name: reduce to a safe basename so a
+            # crafted filename cannot write outside the temp directory.
+            tmp = Path(tempfile.mkdtemp(prefix="hawkscan_ui_")) / safe_name(filename)
             tmp.write_bytes(content)
             try:
                 res = engine.scan(tmp)
@@ -74,6 +77,12 @@ def _make_handler(engine: Engine):
                     pass
 
     return Handler
+
+
+def safe_name(filename: str | None) -> str:
+    """Reduce an untrusted upload filename to a path-traversal-safe basename."""
+    base = os.path.basename((filename or "").replace("\\", "/")).strip(". ")
+    return base or "upload.bin"
 
 
 def _parse_upload(content_type: str, body: bytes):

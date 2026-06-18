@@ -29,10 +29,11 @@ class AnalysisContext:
         return self.info.path
 
     def read_all(self) -> bytes:
-        """Return full bytes, reading from disk if not already cached."""
-        if self.content is not None:
-            return self.content
-        return self.info.path.read_bytes()
+        """Return full bytes, reading from disk once and caching the result so
+        large files are not re-read by every analyzer."""
+        if self.content is None:
+            self.content = self.info.path.read_bytes()
+        return self.content
 
 
 class Analyzer:
