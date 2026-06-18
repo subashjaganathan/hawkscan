@@ -26,6 +26,7 @@ class ScanResult:
     capabilities: dict[str, Any] = field(default_factory=dict)  # category -> {apis, techniques}
     mitre: dict[str, Any] = field(default_factory=dict)         # technique id -> {name, ...}
     dynamic: dict[str, Any] = field(default_factory=dict)        # behavioural-analysis result
+    virustotal: dict[str, Any] = field(default_factory=dict)     # optional VT enrichment
     duration_ms: float = 0.0
 
     @property
@@ -61,6 +62,7 @@ class ScanResult:
             "capabilities": self.capabilities,
             "mitre_attack": self.mitre,
             "dynamic": self.dynamic,
+            "virustotal": self.virustotal,
             "findings": [f.to_dict() for f in self.findings],
             "analyzers_run": self.analyzers_run,
             "analyzers_skipped": self.analyzers_skipped,

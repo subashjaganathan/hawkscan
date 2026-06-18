@@ -118,6 +118,38 @@ def _run_dynamic(res, path, timeout: int, detonate: bool, method: str) -> None:
     res.verdict = score_to_verdict(res.score)
 
 
+def _run_vt(res) -> None:
+    """Enrich a result with a VirusTotal hash lookup and re-score."""
+    from . import vt
+
+    info = vt.lookup_hash(res.info.sha256)
+    res.virustotal = info
+    if info.get("error"):
+        res.findings.append(Finding(
+            analyzer="virustotal", title="VirusTotal lookup unavailable",
+            severity=Severity.INFO, category="reputation", detail=info["error"]))
+        return
+    if not info["found"]:
+        res.findings.append(Finding(
+            analyzer="virustotal", title="Not seen on VirusTotal",
+            severity=Severity.INFO, category="reputation",
+            detail="Hash unknown to VirusTotal."))
+        return
+
+    mal = info["malicious"]
+    sev = (Severity.CRITICAL if mal >= 5 else Severity.HIGH if mal >= 1
+           else Severity.INFO)
+    res.findings.append(Finding(
+        analyzer="virustotal",
+        title=f"VirusTotal: {mal}/{info['total']} engines flagged malicious",
+        severity=sev, category="reputation",
+        detail=(", ".join(info["names"]) or "no names"),
+        data=info))
+    res.findings = Engine._dedup(res.findings)
+    res.raw_score, res.score = Engine._score(res.findings)
+    res.verdict = score_to_verdict(res.score)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="hawkscan",
@@ -165,7 +197,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Port for the web UI (default 8000).")
     p.add_argument("--ai", action="store_true",
                    help="Append an AI plain-language summary (needs anthropic + "
-                        "ANTHROPIC_API_KEY; the only feature that uses the network).")
+                        "ANTHROPIC_API_KEY; uses the network).")
+    p.add_argument("--vt", action="store_true",
+                   help="Enrich with a VirusTotal hash lookup (opt-in, needs "
+                        "VT_API_KEY; sends the hash only, never the file).")
     p.add_argument("--extract", metavar="DIR",
                    help="Carve embedded files (PE/ELF/ZIP/...) into DIR.")
     p.add_argument("--dynamic", action="store_true",
@@ -275,6 +310,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.dynamic:
             _run_dynamic(res, f, args.dynamic_timeout, args.detonate,
                          args.dynamic_method)
+        if args.vt:
+            _run_vt(res)
 
         results.append(res)
         worst = max(worst, res.verdict)

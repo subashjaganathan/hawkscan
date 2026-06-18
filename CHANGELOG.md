@@ -2,6 +2,14 @@
 
 All notable changes to HawkScan are documented here.
 
+## [0.5.0]
+
+### Added
+- **VirusTotal enrichment** (`--vt`): opt-in reputation lookup by SHA-256 hash
+  only (the file is never uploaded). Gated on VT_API_KEY; stdlib urllib, no new
+  dependency. Detections fold into the verdict. This was the last unimplemented
+  function from the reference tool's flag set; HawkScan now covers them all.
+
 ## [0.4.0]
 
 ### Added

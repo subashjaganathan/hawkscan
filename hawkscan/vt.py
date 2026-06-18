@@ -1,0 +1,64 @@
+"""Optional VirusTotal hash lookup (opt-in, requires network + an API key).
+
+Privacy-preserving by design: it queries VirusTotal by the file's SHA-256 hash
+only and never uploads the file itself. Disabled unless VT_API_KEY (or
+VIRUSTOTAL_API_KEY) is set, so the offline default is unaffected. Uses the
+stdlib (urllib) - no extra dependency.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import urllib.error
+import urllib.request
+
+_API = "https://www.virustotal.com/api/v3/files/"
+
+
+def _api_key() -> str:
+    return os.environ.get("VT_API_KEY") or os.environ.get("VIRUSTOTAL_API_KEY") or ""
+
+
+def available() -> tuple[bool, str]:
+    if not _api_key():
+        return False, "VT_API_KEY is not set"
+    return True, ""
+
+
+def lookup_hash(sha256: str, timeout: int = 20) -> dict:
+    """Return {found, malicious, suspicious, harmless, total, names, error}.
+
+    Only the hash is sent; the file is never uploaded.
+    """
+    out = {"found": False, "malicious": 0, "suspicious": 0, "harmless": 0,
+           "total": 0, "names": [], "error": ""}
+    ok, why = available()
+    if not ok:
+        out["error"] = why
+        return out
+
+    req = urllib.request.Request(_API + sha256,
+                                 headers={"x-apikey": _api_key(),
+                                          "User-Agent": "HawkScan"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            data = json.loads(resp.read().decode("utf-8", "ignore"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return out  # not found = not previously seen by VT
+        out["error"] = f"HTTP {exc.code}"
+        return out
+    except Exception as exc:
+        out["error"] = str(exc)
+        return out
+
+    attrs = (data.get("data") or {}).get("attributes") or {}
+    stats = attrs.get("last_analysis_stats") or {}
+    out["found"] = True
+    out["malicious"] = int(stats.get("malicious", 0))
+    out["suspicious"] = int(stats.get("suspicious", 0))
+    out["harmless"] = int(stats.get("harmless", 0))
+    out["total"] = sum(int(v) for v in stats.values() if isinstance(v, int))
+    out["names"] = attrs.get("names", [])[:5]
+    return out

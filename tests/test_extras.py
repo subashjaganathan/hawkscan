@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from hawkscan.intel import sigcheck
-from hawkscan import ai, webui
+from hawkscan import ai, webui, vt
 
 
 def test_sigcheck_returns_known_status():
@@ -37,6 +37,16 @@ def test_webui_multipart_parse():
         f"multipart/form-data; boundary={boundary}", body)
     assert name == "a.bin"
     assert content == b"HELLO"
+
+
+def test_vt_gating_and_degradation(monkeypatch):
+    monkeypatch.delenv("VT_API_KEY", raising=False)
+    monkeypatch.delenv("VIRUSTOTAL_API_KEY", raising=False)
+    ok, why = vt.available()
+    assert ok is False and "VT_API_KEY" in why
+    # Lookup never raises without a key; returns a structured error.
+    res = vt.lookup_hash("a" * 64)
+    assert res["found"] is False and res["error"]
 
 
 def test_hashdb_loader(tmp_path, monkeypatch):
