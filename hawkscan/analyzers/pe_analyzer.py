@@ -204,7 +204,17 @@ class PEAnalyzer(Analyzer):
         except Exception:
             ov_off = None
         if ov_off is not None:
-            overlay = ctx.read_all()[ov_off:]
+            data_all = ctx.read_all()
+            # Exclude the Authenticode certificate table: it lives after the last
+            # section (so pefile counts it as overlay) and is high-entropy, which
+            # would otherwise flag every signed binary. SECURITY dir VirtualAddress
+            # is a raw file offset.
+            cert_lo = sec_dir.VirtualAddress
+            cert_hi = cert_lo + sec_dir.Size if cert_lo else 0
+            if cert_hi and cert_lo >= ov_off:
+                overlay = data_all[ov_off:cert_lo] + data_all[cert_hi:]
+            else:
+                overlay = data_all[ov_off:]
             if len(overlay) > 2048:
                 ent = shannon_entropy(overlay)
                 high = ent >= 7.2
@@ -214,9 +224,9 @@ class PEAnalyzer(Analyzer):
                           f"entropy {ent:.2f})",
                     severity=Severity.MEDIUM if high else Severity.LOW,
                     category="dropper",
-                    detail="Data after the last section; high entropy suggests a "
-                           "bundled or encrypted payload." if high else
-                           "Data appended after the last PE section.",
+                    detail="Data after the last section (excluding any signature); "
+                           "high entropy suggests a bundled or encrypted payload."
+                           if high else "Data appended after the last PE section.",
                     data={"overlay_size": len(overlay), "entropy": round(ent, 3)},
                 )
 
@@ -227,18 +237,22 @@ class PEAnalyzer(Analyzer):
             yield Finding(analyzer=self.name, title="Version info present",
                           severity=Severity.INFO, category="metadata",
                           detail=shown, data={"version_info": version})
-            # OriginalFilename disagreeing with the on-disk name is a classic
-            # masquerade (e.g. a tool renamed to look like a system file).
+            # OriginalFilename disagreeing with the on-disk name can indicate a
+            # renamed tool. Renaming is common/benign, so this is LOW and skips
+            # generic placeholder values to avoid false positives.
             orig = version.get("OriginalFilename", "").strip().lower()
             actual = ctx.info.path.name.lower()
-            if orig and actual and not actual.startswith(orig.rsplit(".", 1)[0]) \
-                    and orig.rsplit(".", 1)[0] not in actual:
+            placeholders = {"", "unknown_file", "unknown", "originalfilename",
+                            "filename", "none"}
+            if (orig and orig not in placeholders and actual
+                    and not actual.startswith(orig.rsplit(".", 1)[0])
+                    and orig.rsplit(".", 1)[0] not in actual):
                 yield Finding(
                     analyzer=self.name,
-                    title=f"OriginalFilename mismatch ('{orig}' vs '{actual}')",
-                    severity=Severity.MEDIUM, category="masquerading",
+                    title=f"OriginalFilename differs ('{orig}' vs '{actual}')",
+                    severity=Severity.LOW, category="masquerading",
                     detail="The embedded OriginalFilename differs from the file on "
-                           "disk; the binary may have been renamed to blend in.",
+                           "disk; the binary may have been renamed.",
                 )
 
         # Resource directory: count entries and look for embedded executables.

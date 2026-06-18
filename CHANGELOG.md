@@ -2,6 +2,19 @@
 
 All notable changes to HawkScan are documented here.
 
+## [0.6.1]
+
+### Added
+- **.NET (managed PE) analysis**: parses the CLR metadata and recovers #US (IL
+  user strings) and #Strings (type/method names) directly, surfacing URLs,
+  commands and mutexes from .NET malware, and flagging likely symbol obfuscation.
+
+### Fixed
+- Overlay detection no longer counts the Authenticode certificate as appended
+  payload, eliminating a false positive on every embedded-signed binary.
+- OriginalFilename mismatch downgraded to LOW and now skips placeholder values
+  (e.g. "unknown_file"), so legitimately renamed files are not flagged.
+
 ## [0.6.0]
 
 ### Added

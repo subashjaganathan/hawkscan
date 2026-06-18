@@ -49,6 +49,16 @@ def test_vt_gating_and_degradation(monkeypatch):
     assert res["found"] is False and res["error"]
 
 
+def test_dotnet_user_string_parser():
+    from hawkscan.analyzers.dotnet_analyzer import DotNetAnalyzer
+    # #US heap: leading empty blob (0x00), then "hi" as UTF-16LE + flag byte.
+    # blob length = 4 (utf-16 'hi') + 1 flag = 5 -> single compressed byte 0x05.
+    heap = b"\x00" + b"\x05" + "hi".encode("utf-16le") + b"\x00"
+    md = b"PAD" + heap
+    out = DotNetAnalyzer._parse_us(md, (3, len(heap)))
+    assert "hi" in out
+
+
 def test_hashdb_loader(tmp_path, monkeypatch):
     from hawkscan.core import engine
     db = tmp_path / "hashdb.txt"
