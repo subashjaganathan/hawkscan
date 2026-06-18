@@ -98,10 +98,60 @@ hawkscan --rules ./my_rules sample.bin
 hawkscan -r ./build --fail-on likely_malicious
 ```
 
+It accepts any file type and routes it to the relevant analyzers:
+
+```bash
+hawkscan document.docm        # Office macros / auto-exec
+hawkscan exploit.rtf          # RTF object exploits (e.g. Equation Editor)
+hawkscan invoice.pdf          # PDF JavaScript / launch actions
+hawkscan stager.ps1           # script obfuscation, download cradles, VBE/JSE
+hawkscan shortcut.lnk         # LNK launching an interpreter / download
+hawkscan phish.eml            # SPF/DKIM/DMARC, spoofing, malicious attachments
+hawkscan capture.pcap         # DNS/DGA, suspicious TLDs, C2 beaconing
+hawkscan app.apk app.ipa      # Android/iOS package analysis
+hawkscan deploy.sh            # leaked cloud keys, IMDS theft, container/k8s abuse
+```
+
 Run as a module without installing:
 
 ```bash
 python -m hawkscan <file>
+```
+
+### Optional, opt-in features
+
+These are off by default and never affect the offline core.
+
+```bash
+# VirusTotal reputation by hash only (the file is never uploaded); needs VT_API_KEY
+hawkscan sample.exe --vt
+
+# Plain-language AI summary; needs the anthropic package and ANTHROPIC_API_KEY
+hawkscan sample.exe --ai
+
+# Local, offline web UI (drag and drop) on 127.0.0.1
+hawkscan --ui
+
+# Dynamic analysis - runs the sample. ONLY inside a disposable VM.
+# Requires HAWKSCAN_SANDBOX=1 plus both --dynamic and --detonate.
+HAWKSCAN_SANDBOX=1 hawkscan sample.exe --dynamic --detonate --dynamic-method auto
+```
+
+Dynamic tracers (`--dynamic-method`): monitor, strace, Frida API hooking, and ADB
+for Android. See `docs/dynamic-analysis.md` for safe VM setup.
+
+### Tuning
+
+Drop a `hawkscan.toml` in the working directory (or `~/.hawkscan/config.toml`)
+to adjust verdict thresholds and the per-category score cap without editing code:
+
+```toml
+[thresholds]
+suspicious = 50
+malicious = 160
+
+[scoring]
+category_cap = 100
 ```
 
 ### Updating community rules
@@ -191,19 +241,6 @@ pointing `--rules` at any rule tree.
   `~/.hawkscan/hashdb.txt`.
 - Per category score capping and duplicate evidence removal keep one theme from
   inflating the verdict.
-
-## Optional, opt-in features
-
-These are off by default and never affect the offline core.
-
-- Dynamic analysis (`--dynamic`): runs the sample under observation. VM gated;
-  requires `HAWKSCAN_SANDBOX=1` plus `--detonate`. Tracers: monitor, strace,
-  Frida API hooking, and ADB for Android. See `docs/dynamic-analysis.md`.
-- VirusTotal (`--vt`): reputation lookup by hash only; the file is never
-  uploaded. Requires `VT_API_KEY`.
-- AI summary (`--ai`): plain language analyst summary. Requires the anthropic
-  package and an API key.
-- Web UI (`--ui`): local, offline drag and drop scanning at 127.0.0.1.
 
 ## Testing
 
