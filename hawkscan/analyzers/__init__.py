@@ -17,6 +17,7 @@ from .email_analyzer import EmailAnalyzer
 from .pcap_analyzer import PcapAnalyzer
 from .android_analyzer import AndroidAnalyzer
 from .carver import Carver
+from .deobfuscate import DeobAnalyzer
 from .yara_analyzer import YaraAnalyzer
 
 # Order matters: StringsAnalyzer populates ctx.cache["strings"], which the
@@ -39,6 +40,7 @@ ALL_ANALYZERS: list[type[Analyzer]] = [
     PcapAnalyzer,
     AndroidAnalyzer,
     Carver,
+    DeobAnalyzer,
     YaraAnalyzer,
 ]
 

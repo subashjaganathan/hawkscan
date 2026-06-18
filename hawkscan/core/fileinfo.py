@@ -24,6 +24,7 @@ class FileInfo:
     extension: str
     magic_hex: str             # first bytes as hex, for the report
     ext_mismatch: bool = False  # extension disagrees with detected type
+    fuzzy: str = ""            # fuzzy/similarity hash (TLSH) when available
     data: dict = field(default_factory=dict)
 
 
@@ -152,6 +153,18 @@ def detect_type(head: bytes, extension: str) -> tuple[str, str]:
     return "data", "Unknown binary data"
 
 
+def fuzzy_hash(data: bytes) -> str:
+    """Return a TLSH similarity hash if the optional `tlsh` library is present,
+    else "" (used to cluster/relate samples). Requires >= 50 bytes."""
+    if len(data) < 50:
+        return ""
+    try:
+        import tlsh  # type: ignore
+        return tlsh.hash(data) or ""
+    except Exception:
+        return ""
+
+
 def inspect(path: Path) -> FileInfo:
     path = Path(path)
     size = path.stat().st_size
@@ -171,6 +184,14 @@ def inspect(path: Path) -> FileInfo:
         if normalized not in compatible and file_type not in {"text", "data"}:
             ext_mismatch = True
 
+    # Fuzzy hash for similarity clustering (skip very large files).
+    fuzzy = ""
+    if 50 <= size <= 64 * 1024 * 1024:
+        try:
+            fuzzy = fuzzy_hash(path.read_bytes())
+        except OSError:
+            fuzzy = ""
+
     return FileInfo(
         path=path,
         size=size,
@@ -182,4 +203,5 @@ def inspect(path: Path) -> FileInfo:
         extension=extension,
         magic_hex=head[:16].hex(" "),
         ext_mismatch=ext_mismatch,
+        fuzzy=fuzzy,
     )

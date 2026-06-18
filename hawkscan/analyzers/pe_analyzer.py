@@ -7,6 +7,7 @@ something useful without the dependency.
 
 from __future__ import annotations
 
+import re
 import struct
 from typing import Iterable
 
@@ -56,7 +57,38 @@ class PEAnalyzer(Analyzer):
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"],
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_SECURITY"],
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"],
+            pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_TLS"],
         ])
+
+        # imphash (import-table fingerprint) + rich header hash: both are
+        # stable identifiers useful for clustering samples into families.
+        try:
+            imphash = pe.get_imphash()
+        except Exception:
+            imphash = ""
+        if imphash:
+            yield Finding(analyzer=self.name, title=f"imphash: {imphash}",
+                          severity=Severity.INFO, category="identity",
+                          data={"imphash": imphash})
+        try:
+            rich = pe.parse_rich_header()
+        except Exception:
+            rich = None
+        if rich and rich.get("checksum") is not None:
+            yield Finding(analyzer=self.name,
+                          title=f"Rich header present (xor key 0x{rich['checksum']:x})",
+                          severity=Severity.INFO, category="identity",
+                          detail="Compiler/toolchain fingerprint.")
+
+        # TLS callbacks run before the entry point - a common early-execution /
+        # anti-analysis technique.
+        tls = getattr(pe, "DIRECTORY_ENTRY_TLS", None)
+        if tls and getattr(tls.struct, "AddressOfCallBacks", 0):
+            yield Finding(
+                analyzer=self.name, title="TLS callback(s) present",
+                severity=Severity.MEDIUM, category="anti-analysis",
+                detail="Code referenced via TLS callbacks executes before main(); "
+                       "often used for early execution or anti-debugging.")
 
         is_dll = bool(pe.FILE_HEADER.Characteristics & 0x2000)
         yield Finding(
@@ -143,6 +175,27 @@ class PEAnalyzer(Analyzer):
                           severity=Severity.INFO, category="signature",
                           detail="Embedded signature present; validity not checked "
                                  "on this platform.")
+
+        # Best-effort signer details from the embedded certificate blob. The
+        # PKCS#7 stores X.509 names as readable strings (CN=, O=); pulling them
+        # avoids a full ASN.1 parser while still surfacing who signed it.
+        if sec_dir.VirtualAddress and sec_dir.Size:
+            try:
+                blob = ctx.read_all()[sec_dir.VirtualAddress:
+                                      sec_dir.VirtualAddress + sec_dir.Size]
+                names = re.findall(rb"(?:CN|O|OU)=([\x20-\x7e]{3,64})", blob)
+                seen, uniq = set(), []
+                for n in names:
+                    s = n.decode("latin1", "ignore").strip()
+                    if s and s not in seen:
+                        seen.add(s); uniq.append(s)
+                if uniq:
+                    yield Finding(analyzer=self.name, title="Certificate signer",
+                                  severity=Severity.INFO, category="signature",
+                                  detail="; ".join(uniq[:4]),
+                                  data={"cert_names": uniq[:10]})
+            except Exception:
+                pass
 
         # Overlay: data appended after the last section. Large, high-entropy
         # overlays often carry a bundled/encrypted second-stage payload.

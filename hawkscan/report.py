@@ -49,6 +49,8 @@ def render_text(result: ScanResult, show_info: bool = False, debug: bool = False
     out.append(f"  Magic     : {info.magic_hex}")
     out.append(f"  SHA-256   : {info.sha256}")
     out.append(f"  MD5       : {info.md5}")
+    if info.fuzzy:
+        out.append(f"  TLSH      : {info.fuzzy}")
     out.append("")
 
     vcolor = _VERDICT_COLOR[result.verdict]

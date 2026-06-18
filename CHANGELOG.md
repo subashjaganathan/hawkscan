@@ -2,6 +2,19 @@
 
 All notable changes to HawkScan are documented here.
 
+## [0.6.0]
+
+### Added
+- **Unpacking / deobfuscation layer**: recovers a hidden second stage and
+  re-scans it, so a benign-looking wrapper whose real payload is packed or
+  encoded is still caught. UPX-unpacks PEs (if the `upx` tool is present) and
+  decodes large base64/hex (incl. UTF-16 PowerShell) blobs in scripts.
+- **PE identity & depth**: imphash and rich-header fingerprints (for family
+  clustering), TLS-callback detection (early-execution/anti-analysis), and
+  best-effort certificate signer extraction.
+- **Fuzzy hashing** (TLSH) in file identity when the optional `tlsh` library is
+  installed, for sample similarity clustering.
+
 ## [0.5.0]
 
 ### Added
