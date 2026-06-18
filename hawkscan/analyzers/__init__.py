@@ -10,6 +10,8 @@ from .macho_analyzer import MachOAnalyzer
 from .capability_analyzer import CapabilityAnalyzer
 from .dotnet_analyzer import DotNetAnalyzer
 from .office_analyzer import OfficeAnalyzer
+from .ole_analyzer import OleAnalyzer
+from .stego_analyzer import StegoAnalyzer
 from .pdf_analyzer import PDFAnalyzer
 from .rtf_analyzer import RTFAnalyzer
 from .lnk_analyzer import LnkAnalyzer
@@ -37,6 +39,8 @@ ALL_ANALYZERS: list[type[Analyzer]] = [
     DotNetAnalyzer,
     BinProfileAnalyzer,
     OfficeAnalyzer,
+    OleAnalyzer,
+    StegoAnalyzer,
     PDFAnalyzer,
     RTFAnalyzer,
     LnkAnalyzer,

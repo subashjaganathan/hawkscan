@@ -112,6 +112,29 @@ def test_pcap_beaconing_detection(tmp_path):
     assert any("Beaconing" in t for t in titles)
 
 
+def test_stego_appended_executable(tmp_path):
+    from hawkscan.analyzers.stego_analyzer import StegoAnalyzer
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200 + b"\xff\xd9"
+    ctx = _ctx(tmp_path, "s.jpg", jpeg + b"MZ\x90\x00" + b"\x00" * 300)
+    titles = [f.title for f in StegoAnalyzer().analyze(ctx)]
+    assert any("appended after image" in t for t in titles)
+
+
+def test_polyglot_detection(tmp_path):
+    from hawkscan.analyzers.stego_analyzer import StegoAnalyzer
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40 + b"IEND" + b"\x00" * 4
+    ctx = _ctx(tmp_path, "p.png", png + b"PK\x03\x04 zip")
+    titles = [f.title for f in StegoAnalyzer().analyze(ctx)]
+    assert any("Polyglot" in t for t in titles)
+
+
+def test_ole_analyzer_handles_non_ole_gracefully(tmp_path):
+    from hawkscan.analyzers.ole_analyzer import OleAnalyzer
+    # Applies only to OLE; a non-OLE file simply does not match.
+    ctx = _ctx(tmp_path, "x.txt", b"not an ole file")
+    assert OleAnalyzer().applies(ctx) is False
+
+
 def test_ioc_whitelist():
     assert _is_whitelisted("http://schemas.microsoft.com/office")
     assert _is_whitelisted("http://www.w3.org/2000/svg")

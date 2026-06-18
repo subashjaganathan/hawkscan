@@ -2,6 +2,19 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.1.0]
+
+### Added
+- **OLE / Outlook .msg analyzer**: walks legacy OLE compound-document streams and
+  parses .msg email (subject, transport headers for SPF/DKIM/DMARC, attachments),
+  flagging embedded-object streams and risky/executable attachments.
+- **Steganography / polyglot detector**: flags data appended after an image's
+  real EOF (smuggled payloads) and polyglot files valid as a second type.
+- **HTML / phishing rule pack**: HTML smuggling, credential-harvesting forms,
+  eval/unescape droppers, ASP.NET/JSP webshells.
+- **Follina (CVE-2022-30190) MSDT** maldoc rule.
+- Now 23 analyzers and 68 rules across 10 packs.
+
 ## [1.0.1]
 
 ### Security

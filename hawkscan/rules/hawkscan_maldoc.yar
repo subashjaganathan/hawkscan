@@ -86,3 +86,19 @@ rule HawkScan_Maldoc_Embedded_PowerShell
     condition:
         $a and 2 of ($b,$c,$d,$e,$f)
 }
+
+rule HawkScan_Maldoc_Follina_MSDT
+{
+    meta:
+        description = "Follina (CVE-2022-30190) MSDT protocol abuse"
+        severity = "high"
+        category = "maldoc"
+    strings:
+        $a = "ms-msdt:" nocase
+        $b = "ms-msdt:/id" nocase
+        $c = "IT_BrowseForFile" nocase
+        $d = "PCWDiagnostic" nocase
+        $e = "$(Invoke-Expression" nocase
+    condition:
+        $a and ($b or $c or $d or $e)
+}

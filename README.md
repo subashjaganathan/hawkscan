@@ -12,16 +12,16 @@ auditable verdict you can defend finding by finding.
 
 ## Highlights
 
-- 21 analyzers covering Windows, Linux, macOS, Android, iOS, documents, archives,
+- 23 analyzers covering Windows, Linux, macOS, Android, iOS, documents, archives,
   email, network captures and cloud artefacts.
 - Capability categorisation mapped to MITRE ATT&CK techniques.
 - Unpacking and deobfuscation layer that recovers and re-scans hidden payloads.
 - Explainable weighted verdict with built in false positive controls.
-- 63 original YARA rules across 9 packs, plus optional community rules.
+- 68 original YARA rules across 10 packs, plus optional community rules.
 - Text, JSON and self contained HTML reports.
 - Optional, opt-in extras: dynamic sandbox analysis, VirusTotal lookup, AI summary
   and a local web UI.
-- Zero required dependencies for the core engine. 95 automated tests, CI on Linux
+- Zero required dependencies for the core engine. 102 automated tests, CI on Linux
   and Windows.
 
 ## What it is and is not
@@ -156,7 +156,7 @@ category_cap = 100
 
 ### Updating community rules
 
-HawkScan ships with 63 original YARA rules. To add the community YARA-Forge set
+HawkScan ships with 68 original YARA rules. To add the community YARA-Forge set
 (thousands of rules, cached per user, never committed to the repository):
 
 ```bash
@@ -213,6 +213,8 @@ findings, every decision is auditable and the thresholds are tuned in one place.
 | Capability | Groups 149 APIs into behavioural categories and maps them to MITRE ATT&CK |
 | Binary profile | Compiler/runtime detection (Go, .NET, Rust, Nim, PyInstaller, AutoIt) |
 | Office | VBA macros, auto execute, encrypted documents, OneNote droppers |
+| OLE / MSG | Legacy OLE stream walk, embedded-object detection, Outlook .msg headers and attachments |
+| Steganography | Data appended after an image's real EOF and polyglot files (image valid as a second type) |
 | PDF | JavaScript, OpenAction, Launch, embedded files, obfuscation |
 | RTF | Embedded OLE objects, Equation Editor and OLE2Link exploits, Packager droppers |
 | LNK | Windows shortcut header parsing; embedded command-interpreter/download detection |
@@ -227,7 +229,7 @@ findings, every decision is auditable and the thresholds are tuned in one place.
 
 ## Detection content
 
-63 original YARA rules across 9 packs: Windows techniques, Linux/ELF, macOS,
+68 original YARA rules across 10 packs: Windows techniques, Linux/ELF, macOS,
 mobile (Android and iOS), cloud, malicious documents, behaviours and families
 (infostealers, ransomware, miners, RATs, webshells, Cobalt Strike and more). The
 capability database maps 149 Windows and Linux APIs to MITRE ATT&CK techniques.
@@ -249,7 +251,7 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-95 tests run on Linux and Windows across Python 3.11 to 3.13 through continuous
+102 tests run on Linux and Windows across Python 3.11 to 3.13 through continuous
 integration, including an end to end detection regression corpus and rule compile
 guards. A benchmark harness (`tools/benchmark.py`) measures precision and recall
 against a labelled malicious/benign corpus.
