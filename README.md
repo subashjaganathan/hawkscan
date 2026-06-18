@@ -12,7 +12,7 @@ auditable verdict you can defend finding by finding.
 
 ## Highlights
 
-- 20 analyzers covering Windows, Linux, macOS, Android, iOS, documents, archives,
+- 21 analyzers covering Windows, Linux, macOS, Android, iOS, documents, archives,
   email, network captures and cloud artefacts.
 - Capability categorisation mapped to MITRE ATT&CK techniques.
 - Unpacking and deobfuscation layer that recovers and re-scans hidden payloads.
@@ -21,7 +21,7 @@ auditable verdict you can defend finding by finding.
 - Text, JSON and self contained HTML reports.
 - Optional, opt-in extras: dynamic sandbox analysis, VirusTotal lookup, AI summary
   and a local web UI.
-- Zero required dependencies for the core engine. 93 automated tests, CI on Linux
+- Zero required dependencies for the core engine. 95 automated tests, CI on Linux
   and Windows.
 
 ## What it is and is not
@@ -165,10 +165,11 @@ findings, every decision is auditable and the thresholds are tuned in one place.
 | Office | VBA macros, auto execute, encrypted documents, OneNote droppers |
 | PDF | JavaScript, OpenAction, Launch, embedded files, obfuscation |
 | RTF | Embedded OLE objects, Equation Editor and OLE2Link exploits, Packager droppers |
-| Script | Base64/hex payloads, obfuscation, dynamic execution |
+| LNK | Windows shortcut header parsing; embedded command-interpreter/download detection |
+| Script | Base64/hex payloads, obfuscation, dynamic execution, encoded (VBE/JSE) scripts |
 | Archive | Double extension lures, encrypted archives, decompression bombs |
 | Email | EML headers (SPF/DKIM/DMARC), sender spoofing, malicious attachments |
-| PCAP | Contacted IPs, DNS queries, HTTP hosts, suspicious TLD and DGA domains, cleartext credentials |
+| PCAP | Contacted IPs, DNS queries, HTTP hosts, suspicious TLD and DGA domains, C2 beaconing, cleartext credentials |
 | Android / iOS | APK/DEX permissions and suspicious APIs, iOS app package detection |
 | Carver | Finds and extracts executables and archives embedded inside a carrier |
 | Deobfuscation | Unpacks UPX and decodes base64/hex layers, then re-scans the recovered payload |
@@ -211,7 +212,7 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-93 tests run on Linux and Windows across Python 3.11 to 3.13 through continuous
+95 tests run on Linux and Windows across Python 3.11 to 3.13 through continuous
 integration, including an end to end detection regression corpus and rule compile
 guards. A benchmark harness (`tools/benchmark.py`) measures precision and recall
 against a labelled malicious/benign corpus.

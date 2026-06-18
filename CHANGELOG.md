@@ -2,6 +2,16 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.0.0]
+
+First stable release. Consolidates the full feature set: 21 analyzers spanning
+Windows, Linux, macOS, Android, iOS, documents, archives, email, network
+captures and cloud artefacts; capability + MITRE ATT&CK mapping; unpacking and
+deobfuscation; 63 original YARA rules across 9 packs; explainable weighted
+verdicts with false-positive controls; text/JSON/HTML reports; and opt-in
+dynamic, VirusTotal, AI and web-UI features. No functional changes from 0.8.0 -
+this release marks the API and behaviour as stable.
+
 ## [0.8.0]
 
 ### Added
