@@ -98,11 +98,16 @@ class PEAnalyzer(Analyzer):
         # API-to-capability/ATT&CK scoring (so we don't double-count here).
         if hasattr(pe, "DIRECTORY_ENTRY_IMPORT"):
             api_names: set[str] = set()
+            api_addrs: dict[str, str] = {}
             for entry in pe.DIRECTORY_ENTRY_IMPORT:
                 for imp in entry.imports:
                     if imp.name:
-                        api_names.add(imp.name.decode("latin1", "ignore"))
+                        n = imp.name.decode("latin1", "ignore")
+                        api_names.add(n)
+                        if imp.address:
+                            api_addrs[n] = f"0x{imp.address:x}"
             ctx.cache["api_names"] = api_names
+            ctx.cache["api_addrs"] = api_addrs
         else:
             yield Finding(
                 analyzer=self.name,

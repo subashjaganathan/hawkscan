@@ -34,6 +34,8 @@ CATEGORY_SEVERITY: dict[str, str] = {
     "System Discovery": "low",
     "Screen / Audio Capture": "medium",
     "Dynamic API Resolution": "medium",
+    "Collection": "medium",
+    "Defense Evasion": "medium",
 }
 
 # (category, mitre_id, mitre_name). mitre_id may be "" when no clean mapping.
@@ -221,6 +223,21 @@ API_DB: dict[str, tuple[str, str, str]] = {
     # --- Service manipulation ---
     "ChangeServiceConfig2A": _T("Service Manipulation", "T1543.003", "Windows Service"),
     "ControlService": _T("Service Manipulation", "T1543.003", "Windows Service"),
+
+    # --- Collection (clipboard / data staging) ---
+    "GetClipboardData": _T("Collection", "T1115", "Clipboard Data"),
+    "SetClipboardData": _T("Collection", "T1115", "Clipboard Data"),
+    "OpenClipboard": _T("Collection", "T1115", "Clipboard Data"),
+
+    # --- Defense evasion (indicator removal / time-based) ---
+    "DeleteFileW": _T("Defense Evasion", "T1070.004", "Indicator Removal: File Deletion"),
+    "SetFileAttributesW": _T("Defense Evasion", "T1564.001", "Hidden Files and Directories"),
+    "Sleep": _T("Defense Evasion", "T1497.003", "Time Based Evasion"),
+    "NtDelayExecution": _T("Defense Evasion", "T1497.003", "Time Based Evasion"),
+
+    # --- More discovery ---
+    "EnumWindows": _T("System Discovery", "T1010", "Application Window Discovery"),
+    "GetSystemMetrics": _T("System Discovery", "T1082", "System Information Discovery"),
 }
 
 # Normalised lookup (lowercased, A/W/Ex suffixes folded).

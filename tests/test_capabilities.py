@@ -51,6 +51,22 @@ def test_keylogging_combo_single_api():
     assert any(h["name"] == "Keylogging" for h in hits)
 
 
+def test_new_categories_present():
+    caps, _ = cap.categorize(["GetClipboardData", "DeleteFileW", "Sleep"])
+    assert "Collection" in caps
+    assert "Defense Evasion" in caps
+
+
+def test_capability_output_includes_addresses_key(tmp_path):
+    from hawkscan.core.engine import Engine
+    f = tmp_path / "inj.exe"
+    f.write_bytes(b"MZ" + b"WriteProcessMemory CreateRemoteThread VirtualAllocEx")
+    res = Engine().scan(f)
+    # Each capability entry exposes an 'addresses' map (empty without pefile).
+    for cat, entry in res.capabilities.items():
+        assert "apis" in entry and "addresses" in entry
+
+
 def test_expanded_api_coverage():
     # Spot-check APIs added in the coverage expansion.
     caps, techs = cap.categorize(

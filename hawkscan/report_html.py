@@ -110,7 +110,10 @@ def _file_section(r: ScanResult) -> str:
     if r.capabilities:
         parts.append("<h2>Capabilities</h2><div class='card'>")
         for cat in sorted(r.capabilities):
-            apis = ", ".join(r.capabilities[cat]["apis"])
+            cap = r.capabilities[cat]
+            addrs = cap.get("addresses") or {}
+            apis = ", ".join(f"{a} ({addrs[a]})" if a in addrs else a
+                             for a in cap["apis"])
             parts.append(f"<div class='cap'><b>{_esc(cat)}</b>: "
                          f"<span class='muted'>{_esc(apis)}</span></div>")
         parts.append("</div>")

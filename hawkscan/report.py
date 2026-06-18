@@ -78,8 +78,12 @@ def render_text(result: ScanResult, show_info: bool = False, debug: bool = False
     if result.capabilities:
         out.append(_c("  Capabilities:", "1"))
         for cat in sorted(result.capabilities):
-            apis = result.capabilities[cat]["apis"]
-            shown = ", ".join(apis[:6])
+            cap = result.capabilities[cat]
+            apis = cap["apis"]
+            addrs = cap.get("addresses") or {}
+            # Show address next to each API when known (matches deep-tool depth).
+            shown = ", ".join(f"{a} {addrs[a]}" if a in addrs else a
+                              for a in apis[:6])
             more = f" (+{len(apis) - 6})" if len(apis) > 6 else ""
             out.append(f"   - {cat}: {_c(shown + more, '90')}")
         out.append("")

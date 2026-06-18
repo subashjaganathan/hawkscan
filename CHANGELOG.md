@@ -2,6 +2,14 @@
 
 All notable changes to HawkScan are documented here.
 
+## [0.3.1]
+
+### Added
+- Per-API addresses in the capability output (text and HTML), giving import-level
+  detail comparable to deeper analysis tools.
+- Capability categories expanded with Collection (clipboard) and Defense Evasion
+  (indicator removal / time-based) buckets, plus more discovery APIs.
+
 ## [0.3.0]
 
 ### Added

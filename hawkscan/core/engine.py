@@ -198,8 +198,13 @@ class Engine:
         # Surface structured capability + ATT&CK data computed by the analyzer.
         caps = ctx.cache.get("capabilities")
         if caps:
+            addrs = ctx.cache.get("api_addrs") or {}
             result.capabilities = {
-                cat: {"apis": cap.apis, "techniques": cap.techniques}
+                cat: {
+                    "apis": cap.apis,
+                    "techniques": cap.techniques,
+                    "addresses": {a: addrs[a] for a in cap.apis if a in addrs},
+                }
                 for cat, cap in caps.items()
             }
         result.mitre = ctx.cache.get("mitre") or {}
