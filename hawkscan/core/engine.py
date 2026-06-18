@@ -85,6 +85,26 @@ CATEGORY_SCORE_CAP = 120
 # Malicious) for instant offline detection of samples you have already triaged.
 _ALLOWLIST_PATH = Path.home() / ".hawkscan" / "allowlist.txt"
 _DENYLIST_PATH = Path.home() / ".hawkscan" / "denylist.txt"
+# Labelled hash database: "sha256[ <label>]" per line. A non-"clean" label
+# forces a Malicious verdict; the label (e.g. family name) is shown.
+_HASHDB_PATH = Path.home() / ".hawkscan" / "hashdb.txt"
+
+
+def _load_hashdb(path: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return out
+    for ln in lines:
+        ln = ln.split("#", 1)[0].strip()
+        if not ln:
+            continue
+        parts = ln.split(None, 1)
+        h = parts[0].lower()
+        if len(h) == 64:
+            out[h] = parts[1].strip() if len(parts) > 1 else "malicious"
+    return out
 
 
 def _load_hashlist(path: Path) -> set[str]:
@@ -117,6 +137,7 @@ class Engine:
         self.extract_dir = extract_dir
         self.allowlist = _load_allowlist()
         self.denylist = _load_hashlist(_DENYLIST_PATH)
+        self.hashdb = _load_hashdb(_HASHDB_PATH)
 
     def scan(self, path: str | Path) -> ScanResult:
         start = time.perf_counter()
@@ -149,6 +170,23 @@ class Engine:
             result.verdict = Verdict.MALICIOUS
             result.duration_ms = (time.perf_counter() - start) * 1000
             return result
+
+        # Labelled hash database (e.g. imported threat-intel hashes).
+        label = self.hashdb.get(info.sha256)
+        if label:
+            malicious = label.lower() not in ("clean", "benign", "good")
+            result.findings.append(Finding(
+                analyzer="hashdb",
+                title=f"Hash in database: {label}",
+                severity=Severity.CRITICAL if malicious else Severity.INFO,
+                category="hashdb",
+                detail="SHA-256 matched ~/.hawkscan/hashdb.txt.",
+            ))
+            if malicious:
+                result.raw_score = result.score = 200
+                result.verdict = Verdict.MALICIOUS
+                result.duration_ms = (time.perf_counter() - start) * 1000
+                return result
 
         # Oversized files: identify only, skip the full-read analyzers.
         if info.size > self.max_scan_size:

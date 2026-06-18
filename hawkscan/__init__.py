@@ -1,3 +1,3 @@
 """HawkScan - offline, explainable malware scanner for any file on any OS."""
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"

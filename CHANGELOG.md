@@ -2,6 +2,23 @@
 
 All notable changes to HawkScan are documented here.
 
+## [0.4.0]
+
+### Added
+- **Local web UI** (`--ui`): offline drag-and-drop scanning on 127.0.0.1, returns
+  the HTML report. Stdlib only, no Flask.
+- **Authenticode signature verification** (Windows): real validity check for
+  embedded *and* catalog-signed binaries via ctypes (WinVerifyTrust + catalog
+  APIs); degrades to presence-only off-Windows. Fixes catalog-signed system
+  binaries previously shown as "not signed".
+- **Offline hash database**: `--hashscan` (hash-only lookup mode) and
+  `--import-hashes FILE --label` to bulk-load threat-intel hashes; matches force
+  a Malicious verdict with the label shown.
+- **Resource & version-info analysis** for PE: enumerates resources, extracts
+  version strings, and flags OriginalFilename masquerading.
+- **Optional AI summary** (`--ai`): plain-language analyst summary via the Claude
+  API. Opt-in, gated on the SDK + API key; the only feature that uses the network.
+
 ## [0.3.1]
 
 ### Added

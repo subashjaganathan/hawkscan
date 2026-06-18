@@ -55,6 +55,7 @@ class PEAnalyzer(Analyzer):
         pe.parse_data_directories(directories=[
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"],
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_SECURITY"],
+            pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"],
         ])
 
         is_dll = bool(pe.FILE_HEADER.Characteristics & 0x2000)
@@ -122,14 +123,26 @@ class PEAnalyzer(Analyzer):
         sec_dir = pe.OPTIONAL_HEADER.DATA_DIRECTORY[
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_SECURITY"]
         ]
-        if sec_dir.VirtualAddress == 0 or sec_dir.Size == 0:
-            yield Finding(
-                analyzer=self.name,
-                title="Not digitally signed",
-                severity=Severity.LOW,
-                category="signature",
-                detail="No embedded Authenticode signature.",
-            )
+        from ..intel import sigcheck
+        status, detail = sigcheck.verify(ctx.info.path)
+        if status == "valid":
+            yield Finding(analyzer=self.name, title="Digitally signed (valid)",
+                          severity=Severity.INFO, category="signature", detail=detail)
+        elif status == "invalid":
+            yield Finding(analyzer=self.name, title="Invalid digital signature",
+                          severity=Severity.HIGH, category="signature", detail=detail)
+        elif status == "unsigned" or (status == "unknown" and
+                                      (sec_dir.VirtualAddress == 0 or sec_dir.Size == 0)):
+            # Off-Windows we can't verify; fall back to embedded-presence only.
+            note = ("No embedded Authenticode signature." if status == "unknown"
+                    else detail)
+            yield Finding(analyzer=self.name, title="Not digitally signed",
+                          severity=Severity.LOW, category="signature", detail=note)
+        elif status == "unknown" and sec_dir.Size > 0:
+            yield Finding(analyzer=self.name, title="Signature present (unverified)",
+                          severity=Severity.INFO, category="signature",
+                          detail="Embedded signature present; validity not checked "
+                                 "on this platform.")
 
         # Overlay: data appended after the last section. Large, high-entropy
         # overlays often carry a bundled/encrypted second-stage payload.
@@ -154,28 +167,65 @@ class PEAnalyzer(Analyzer):
                     data={"overlay_size": len(overlay), "entropy": round(ent, 3)},
                 )
 
-        # Resource directory: an embedded PE inside a resource is a classic
-        # dropper pattern (the loader carries its payload as a resource).
+        # Version-info resource strings (CompanyName, OriginalFilename, ...).
+        version = self._version_info(pe)
+        if version:
+            shown = ", ".join(f"{k}={v}" for k, v in list(version.items())[:5])
+            yield Finding(analyzer=self.name, title="Version info present",
+                          severity=Severity.INFO, category="metadata",
+                          detail=shown, data={"version_info": version})
+            # OriginalFilename disagreeing with the on-disk name is a classic
+            # masquerade (e.g. a tool renamed to look like a system file).
+            orig = version.get("OriginalFilename", "").strip().lower()
+            actual = ctx.info.path.name.lower()
+            if orig and actual and not actual.startswith(orig.rsplit(".", 1)[0]) \
+                    and orig.rsplit(".", 1)[0] not in actual:
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"OriginalFilename mismatch ('{orig}' vs '{actual}')",
+                    severity=Severity.MEDIUM, category="masquerading",
+                    detail="The embedded OriginalFilename differs from the file on "
+                           "disk; the binary may have been renamed to blend in.",
+                )
+
+        # Resource directory: count entries and look for embedded executables.
         if hasattr(pe, "DIRECTORY_ENTRY_RESOURCE"):
+            rtypes, entries, embedded = 0, 0, False
             for rtype in pe.DIRECTORY_ENTRY_RESOURCE.entries:
-                for rid in getattr(rtype, "directory", {}).entries if hasattr(rtype, "directory") else []:
-                    for lang in getattr(rid, "directory", {}).entries if hasattr(rid, "directory") else []:
+                rtypes += 1
+                for rid in getattr(getattr(rtype, "directory", None), "entries", []):
+                    for lang in getattr(getattr(rid, "directory", None), "entries", []):
+                        entries += 1
                         try:
-                            rva = lang.data.struct.OffsetToData
-                            size = lang.data.struct.Size
-                            blob = pe.get_data(rva, min(size, 4))
+                            blob = pe.get_data(lang.data.struct.OffsetToData, 4)
                         except Exception:
                             continue
-                        if blob[:2] == b"MZ":
-                            yield Finding(
-                                analyzer=self.name,
-                                title="Embedded PE in resource section",
-                                severity=Severity.HIGH,
-                                category="dropper",
-                                detail="A resource entry begins with an MZ header; "
-                                       "the binary carries an embedded executable.",
-                            )
-                            return  # one is enough
+                        if blob[:2] == b"MZ" or blob[:4] == b"\x7fELF":
+                            embedded = True
+            yield Finding(analyzer=self.name,
+                          title=f"{entries} resource(s) in {rtypes} type(s)",
+                          severity=Severity.INFO, category="metadata")
+            if embedded:
+                yield Finding(
+                    analyzer=self.name,
+                    title="Embedded executable in resource section",
+                    severity=Severity.HIGH, category="dropper",
+                    detail="A resource entry begins with an executable header; "
+                           "the binary carries an embedded payload.",
+                )
+
+    @staticmethod
+    def _version_info(pe) -> dict:
+        out: dict[str, str] = {}
+        for fi_list in getattr(pe, "FileInfo", []) or []:
+            for entry in fi_list:
+                for st in getattr(entry, "StringTable", []) or []:
+                    for k, v in getattr(st, "entries", {}).items():
+                        try:
+                            out[k.decode("latin1", "ignore")] = v.decode("latin1", "ignore")
+                        except Exception:
+                            continue
+        return out
 
     # ---- fallback path ---------------------------------------------------
     def _analyze_basic(self, ctx: AnalysisContext) -> Iterable[Finding]:

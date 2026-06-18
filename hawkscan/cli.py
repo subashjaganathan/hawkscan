@@ -138,6 +138,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Write a self-contained HTML report to FILE.")
     p.add_argument("--rules", metavar="DIR",
                    help="Directory of additional YARA (.yar) rules.")
+    p.add_argument("--hashscan", action="store_true",
+                   help="Hash-only mode: look up file hashes in the local "
+                        "allowlist/denylist/hashdb and report, no deep analysis.")
+    p.add_argument("--import-hashes", metavar="FILE",
+                   help="Append SHA-256 hashes from FILE to the local hash DB.")
+    p.add_argument("--label", default="malicious",
+                   help="Label to apply with --import-hashes (default: malicious).")
     p.add_argument("--show-info", action="store_true",
                    help="Include informational findings in text output.")
     p.add_argument("--min-verdict", choices=[v.name.lower() for v in Verdict],
@@ -152,6 +159,13 @@ def build_parser() -> argparse.ArgumentParser:
                         "Default 256.")
     p.add_argument("--debug", action="store_true",
                    help="Include full analyzer tracebacks in output.")
+    p.add_argument("--ui", action="store_true",
+                   help="Launch the local web UI (offline, 127.0.0.1).")
+    p.add_argument("--ui-port", type=int, default=8000, metavar="PORT",
+                   help="Port for the web UI (default 8000).")
+    p.add_argument("--ai", action="store_true",
+                   help="Append an AI plain-language summary (needs anthropic + "
+                        "ANTHROPIC_API_KEY; the only feature that uses the network).")
     p.add_argument("--extract", metavar="DIR",
                    help="Carve embedded files (PE/ELF/ZIP/...) into DIR.")
     p.add_argument("--dynamic", action="store_true",
@@ -183,6 +197,32 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Rules updated in {dest}")
         return 0
 
+    if args.import_hashes:
+        import re as _re
+        from .core.engine import _HASHDB_PATH
+        try:
+            text = Path(args.import_hashes).read_text(encoding="utf-8", errors="ignore")
+        except OSError as exc:
+            print(f"hawkscan: cannot read {args.import_hashes}: {exc}", file=sys.stderr)
+            return 2
+        hashes = sorted(set(_re.findall(r"\b[0-9a-fA-F]{64}\b", text)))
+        if not hashes:
+            print("hawkscan: no SHA-256 hashes found in file", file=sys.stderr)
+            return 2
+        _HASHDB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _HASHDB_PATH.open("a", encoding="utf-8") as fh:
+            for h in hashes:
+                fh.write(f"{h.lower()} {args.label}\n")
+        print(f"Imported {len(hashes)} hash(es) labelled '{args.label}' into "
+              f"{_HASHDB_PATH}")
+        return 0
+
+    if args.ui:
+        from . import webui
+        webui.serve(port=args.ui_port,
+                    rules_dir=Path(args.rules) if args.rules else None)
+        return 0
+
     if not args.paths:
         print("hawkscan: no files to scan (give a path, or use --update-rules)",
               file=sys.stderr)
@@ -196,6 +236,26 @@ def main(argv: list[str] | None = None) -> int:
     if not files:
         print("hawkscan: no files to scan", file=sys.stderr)
         return 2
+
+    if args.hashscan:
+        from .core import fileinfo
+        hits = 0
+        for f in files:
+            try:
+                h = fileinfo.hash_file(f)[2]  # sha256
+            except OSError as exc:
+                print(f"hawkscan: {f}: {exc}", file=sys.stderr)
+                continue
+            if h in engine.allowlist:
+                verdict = "ALLOWLISTED (clean)"
+            elif h in engine.denylist:
+                verdict = "DENYLISTED (malicious)"; hits += 1
+            elif h in engine.hashdb:
+                verdict = f"HASHDB: {engine.hashdb[h]}"; hits += 1
+            else:
+                verdict = "unknown"
+            print(f"{verdict:28} {h}  {f}")
+        return 1 if (args.fail_on and hits) else 0
 
     min_verdict = Verdict[args.min_verdict.upper()]
     fail_on = Verdict[args.fail_on.upper()] if args.fail_on else None
@@ -222,10 +282,20 @@ def main(argv: list[str] | None = None) -> int:
         if res.verdict < min_verdict:
             continue
 
+        summary = None
+        if args.ai:
+            from . import ai
+            summary = ai.summarize(res.to_dict())
+
         if args.json:
-            json_blobs.append(res.to_dict(include_traces=args.debug))
+            blob = res.to_dict(include_traces=args.debug)
+            if summary:
+                blob["ai_summary"] = summary
+            json_blobs.append(blob)
         elif not args.quiet:
             print(report.render_text(res, show_info=args.show_info, debug=args.debug))
+            if summary:
+                print(f"\n  AI summary:\n  {summary}\n")
             print()
 
     if args.html:

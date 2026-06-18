@@ -1,0 +1,100 @@
+"""Local web UI for HawkScan (stdlib only, no Flask).
+
+Serves a drag-and-drop upload form on 127.0.0.1; uploaded files are scanned with
+the static engine and the self-contained HTML report is returned. Bound to
+localhost by default. This does NOT run dynamic analysis.
+"""
+
+from __future__ import annotations
+
+import email
+import tempfile
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from .core.engine import Engine
+from . import report_html
+
+_FORM = """<!doctype html><html><head><meta charset="utf-8">
+<title>HawkScan</title><style>
+body{background:#0d1117;color:#c9d1d9;font:15px/1.5 -apple-system,Segoe UI,sans-serif;
+margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}
+.box{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:40px;
+text-align:center;max-width:460px}
+h1{margin:0 0 6px}.muted{color:#8b949e;font-size:13px;margin-bottom:24px}
+input[type=file]{display:block;margin:0 auto 18px}
+button{background:#238636;color:#fff;border:0;border-radius:8px;padding:10px 22px;
+font-size:14px;cursor:pointer}
+</style></head><body><div class="box">
+<h1>HawkScan</h1>
+<div class="muted">Offline malware triage &middot; drop a file to scan it</div>
+<form method="post" action="/scan" enctype="multipart/form-data">
+<input type="file" name="file" required>
+<button type="submit">Scan</button>
+</form></div></body></html>"""
+
+
+def _make_handler(engine: Engine):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass  # quiet
+
+        def _send(self, body: str, status: int = 200):
+            data = body.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            self._send(_FORM)
+
+        def do_POST(self):
+            if self.path != "/scan":
+                self._send("Not found", 404)
+                return
+            length = int(self.headers.get("Content-Length", 0))
+            ctype = self.headers.get("Content-Type", "")
+            body = self.rfile.read(length)
+            filename, content = _parse_upload(ctype, body)
+            if content is None:
+                self._send("<p>No file uploaded. <a href='/'>back</a></p>", 400)
+                return
+            tmp = Path(tempfile.mkdtemp(prefix="hawkscan_ui_")) / (filename or "upload.bin")
+            tmp.write_bytes(content)
+            try:
+                res = engine.scan(tmp)
+                self._send(report_html.render_html([res]))
+            finally:
+                try:
+                    tmp.unlink()
+                    tmp.parent.rmdir()
+                except OSError:
+                    pass
+
+    return Handler
+
+
+def _parse_upload(content_type: str, body: bytes):
+    """Extract (filename, bytes) from a multipart/form-data body via stdlib email."""
+    if "multipart/form-data" not in content_type:
+        return None, None
+    raw = b"Content-Type: " + content_type.encode() + b"\r\n\r\n" + body
+    msg = email.message_from_bytes(raw)
+    for part in msg.walk():
+        if part.get_filename():
+            return part.get_filename(), part.get_payload(decode=True)
+    return None, None
+
+
+def serve(host: str = "127.0.0.1", port: int = 8000, rules_dir=None) -> None:
+    engine = Engine(rules_dir=rules_dir)
+    httpd = ThreadingHTTPServer((host, port), _make_handler(engine))
+    print(f"HawkScan web UI on http://{host}:{port}  (Ctrl+C to stop)")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopped")
+    finally:
+        httpd.server_close()
