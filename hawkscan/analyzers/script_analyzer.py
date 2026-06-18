@@ -52,6 +52,18 @@ class ScriptAnalyzer(Analyzer):
 
         lowered = text.lower()
 
+        # Microsoft Script Encoder (VBE/JSE) encoded content. Its #@~^ marker is
+        # a strong malicious signal - legitimate scripts almost never use it now.
+        if "#@~^" in text:
+            yield Finding(
+                analyzer=self.name,
+                title="Encoded script (Microsoft Script Encoder VBE/JSE)",
+                severity=Severity.HIGH,
+                category="obfuscation",
+                detail="Contains the #@~^ encoder marker; the real logic is hidden "
+                       "behind reversible script encoding.",
+            )
+
         # Large base64 blobs embedded in a script = staged payload.
         blobs = _B64_BLOB.findall(text)
         if blobs:

@@ -82,17 +82,20 @@ class PcapAnalyzer(Analyzer):
         dst_ips: Counter = Counter()
         dns_names: set[str] = set()
         http_hosts: set[str] = set()
+        times: dict[str, list[float]] = {}
         creds = False
         pkt_count = 0
 
         off = 24
         while off + 16 <= len(data) and pkt_count < _MAX_PACKETS:
-            incl_len = struct.unpack_from(endian + "I", data, off + 8)[0]
+            ts_sec, ts_usec, incl_len = struct.unpack_from(endian + "III", data, off)
+            ts = ts_sec + ts_usec / 1_000_000
             off += 16
             pkt = data[off: off + incl_len]
             off += incl_len
             pkt_count += 1
-            self._parse_packet(pkt, linktype, dst_ips, dns_names, http_hosts)
+            self._parse_packet(pkt, linktype, dst_ips, dns_names, http_hosts,
+                               times, ts)
             if not creds and any(m in pkt for m in _CRED_MARKERS):
                 creds = True
 
@@ -124,6 +127,27 @@ class PcapAnalyzer(Analyzer):
                 severity=Severity.MEDIUM, category="network",
                 detail="; ".join(sus[:12]))
 
+        # Beaconing: regular, low-jitter intervals to the same destination.
+        for ip, stamps in times.items():
+            if len(stamps) < 8:
+                continue
+            stamps.sort()
+            intervals = [b - a for a, b in zip(stamps, stamps[1:]) if b - a > 0.05]
+            if len(intervals) < 6:
+                continue
+            mean = sum(intervals) / len(intervals)
+            if mean < 1:
+                continue
+            var = sum((x - mean) ** 2 for x in intervals) / len(intervals)
+            cv = (var ** 0.5) / mean  # coefficient of variation; low = regular
+            if cv < 0.15:
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"Beaconing to {ip} (~{mean:.0f}s interval)",
+                    severity=Severity.HIGH, category="c2",
+                    detail=f"{len(intervals)+1} connections at a near-constant "
+                           f"interval (jitter {cv:.0%}); typical of C2 beaconing.")
+
         dga = sorted({n for n in dns_names if _looks_dga(n)})
         if dga:
             yield Finding(
@@ -138,7 +162,8 @@ class PcapAnalyzer(Analyzer):
                 detail="HTTP Basic / FTP / form credentials transmitted in clear.")
 
     @staticmethod
-    def _parse_packet(pkt, linktype, dst_ips, dns_names, http_hosts) -> None:
+    def _parse_packet(pkt, linktype, dst_ips, dns_names, http_hosts,
+                      times=None, ts=0.0) -> None:
         # Locate the IPv4 header depending on link layer.
         if linktype == 1:  # Ethernet
             if len(pkt) < 14 or pkt[12:14] != b"\x08\x00":
@@ -155,6 +180,8 @@ class PcapAnalyzer(Analyzer):
         proto = pkt[ip_off + 9]
         dst = ".".join(str(b) for b in pkt[ip_off + 16: ip_off + 20])
         dst_ips[dst] += 1
+        if times is not None:
+            times.setdefault(dst, []).append(ts)
         l4 = ip_off + ihl
 
         if proto == 6 and len(pkt) >= l4 + 20:  # TCP

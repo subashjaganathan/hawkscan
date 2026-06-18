@@ -102,10 +102,24 @@ class PEAnalyzer(Analyzer):
 
         # Section names + per-section entropy.
         packer_hit = False
+        wx_sections = []
         for section in pe.sections:
             raw_name = section.Name.rstrip(b"\x00")
             if raw_name in _KNOWN_PACKER_SECTIONS:
                 packer_hit = True
+            # Writable + executable section = self-modifying / unpacking stub.
+            ch = section.Characteristics
+            if (ch & 0x20000000) and (ch & 0x80000000):  # EXECUTE + WRITE
+                wx_sections.append(raw_name.decode("latin1", "ignore") or "(unnamed)")
+            # A section far larger in memory than on disk is a classic packer
+            # decompression stub.
+            if section.SizeOfRawData == 0 and section.Misc_VirtualSize > 0x1000:
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"Section {raw_name.decode('latin1')!r} has no raw data "
+                          "but large virtual size",
+                    severity=Severity.LOW, category="packer",
+                    detail="Memory-only section; typical of a packer unpacking stub.")
             sdata = section.get_data()
             if sdata:
                 ent = shannon_entropy(sdata)
@@ -118,6 +132,13 @@ class PEAnalyzer(Analyzer):
                         category="packer",
                         detail="Packed/encrypted section content.",
                     )
+        if wx_sections:
+            yield Finding(
+                analyzer=self.name,
+                title=f"Writable+executable section(s): {', '.join(wx_sections)}",
+                severity=Severity.MEDIUM, category="anti-analysis",
+                detail="W+X (RWX) sections allow self-modifying code; common in "
+                       "packed or shellcode-bearing binaries.")
         if packer_hit:
             yield Finding(
                 analyzer=self.name,

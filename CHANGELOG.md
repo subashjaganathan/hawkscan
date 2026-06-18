@@ -2,6 +2,17 @@
 
 All notable changes to HawkScan are documented here.
 
+## [0.8.0]
+
+### Added
+- **LNK (Windows shortcut) analysis**: parses the Shell Link header and recovers
+  embedded command lines, flagging shortcuts that launch interpreters/downloads.
+- **PE section anomalies**: writable+executable (RWX) sections and memory-only
+  sections (packer unpacking stubs).
+- **PCAP beaconing detection**: flags near-constant-interval connections to a
+  destination (C2 beaconing) via timing-regularity analysis.
+- **Encoded-script detection**: flags Microsoft Script Encoder (VBE/JSE) content.
+
 ## [0.7.0]
 
 ### Added

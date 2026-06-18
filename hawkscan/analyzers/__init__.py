@@ -12,6 +12,7 @@ from .dotnet_analyzer import DotNetAnalyzer
 from .office_analyzer import OfficeAnalyzer
 from .pdf_analyzer import PDFAnalyzer
 from .rtf_analyzer import RTFAnalyzer
+from .lnk_analyzer import LnkAnalyzer
 from .binprofile import BinProfileAnalyzer
 from .script_analyzer import ScriptAnalyzer
 from .archive_analyzer import ArchiveAnalyzer
@@ -38,6 +39,7 @@ ALL_ANALYZERS: list[type[Analyzer]] = [
     OfficeAnalyzer,
     PDFAnalyzer,
     RTFAnalyzer,
+    LnkAnalyzer,
     ScriptAnalyzer,
     ArchiveAnalyzer,
     EmailAnalyzer,

