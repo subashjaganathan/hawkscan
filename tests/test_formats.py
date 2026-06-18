@@ -52,6 +52,26 @@ def test_onenote_detected_with_embedded_object(tmp_path):
     assert any("OneNote embedded file" in t for t in titles)
 
 
+def test_secrets_and_cloud_detection(tmp_path):
+    from hawkscan.analyzers.secrets_analyzer import SecretsAnalyzer
+    data = (b"export AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+            b"curl http://169.254.169.254/latest/meta-data/iam/security-credentials/r\n"
+            b"-----BEGIN RSA PRIVATE KEY-----\n")
+    ctx = _ctx(tmp_path, "c.sh", data)
+    titles = [f.title for f in SecretsAnalyzer().analyze(ctx)]
+    assert any("AWS access key" in t for t in titles)
+    assert any("IMDS" in t for t in titles)
+    assert any("private key" in t.lower() for t in titles)
+
+
+def test_ios_ipa_type_detection(tmp_path):
+    import zipfile
+    f = tmp_path / "app.ipa"
+    with zipfile.ZipFile(f, "w") as zf:
+        zf.writestr("Payload/App.app/Info.plist", b"<plist></plist>")
+    assert fileinfo.inspect(f).file_type == "ios-app"
+
+
 def test_ioc_whitelist():
     assert _is_whitelisted("http://schemas.microsoft.com/office")
     assert _is_whitelisted("http://www.w3.org/2000/svg")

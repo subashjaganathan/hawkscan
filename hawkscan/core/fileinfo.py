@@ -136,6 +136,8 @@ def detect_type(head: bytes, extension: str) -> tuple[str, str]:
                     return "office-ooxml", "Office Open XML document"
                 if extension == ".apk":
                     return "apk", "Android application package"
+                if extension == ".ipa":
+                    return "ios-app", "iOS application package"
                 if extension == ".jar":
                     return "jar", "Java archive"
             return ftype, desc

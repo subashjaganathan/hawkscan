@@ -2,6 +2,22 @@
 
 All notable changes to HawkScan are documented here.
 
+## [0.7.0]
+
+### Added
+- **Secrets & cloud-threat analyzer**: detects leaked cloud credentials (AWS/GCP/
+  Azure keys, private keys, GitHub/Slack tokens, JWTs), instance-metadata (IMDS)
+  credential theft, container escape and Kubernetes attacks, and cloud CLI/exfil
+  abuse - across any file type.
+- **Cloud YARA pack**: IMDS theft, cloud credential-file targeting, container
+  escape, Kubernetes secret abuse, cloud cryptojacking, exfil-to-storage.
+- **Expanded macOS coverage**: infostealer (fake password prompt + exfil) and
+  dylib-hijack rules.
+- **Mobile coverage**: iOS app (.ipa) type detection and a mobile YARA pack
+  (Android banking overlays/RAT, iOS jailbreak/private-API and config-profile abuse).
+- Bundled rule set now 63 rules across 9 packs (Windows, Linux, macOS, mobile,
+  cloud, documents, behaviours, families).
+
 ## [0.6.1]
 
 ### Added

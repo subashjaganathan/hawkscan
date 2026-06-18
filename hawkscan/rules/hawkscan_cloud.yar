@@ -1,0 +1,106 @@
+/*
+ * HawkScan cloud-threat rules (original).
+ * Generic detections for cloud-targeting malware and credential theft: IMDS
+ * abuse, cloud credential harvesting, container escape, Kubernetes attacks,
+ * and cloud cryptojacking. Conservative multi-string conditions.
+ */
+
+rule HawkScan_Cloud_IMDS_Theft
+{
+    meta:
+        description = "Instance metadata (IMDS) credential theft"
+        severity = "high"
+        category = "cloud"
+    strings:
+        $imds = "169.254.169.254"
+        $iam = "iam/security-credentials" nocase
+        $gcp = "metadata.google.internal" nocase
+        $gcptok = "computeMetadata/v1/instance/service-accounts" nocase
+        $hdr = "Metadata-Flavor" nocase
+    condition:
+        ($imds and $iam) or ($gcp and ($gcptok or $hdr))
+}
+
+rule HawkScan_Cloud_Credential_Files
+{
+    meta:
+        description = "Targeting of cloud credential files"
+        severity = "high"
+        category = "cloud"
+    strings:
+        $aws1 = ".aws/credentials" nocase
+        $aws2 = ".aws/config" nocase
+        $gcp = "gcloud/credentials.db" nocase
+        $azure = ".azure/accessTokens.json" nocase
+        $k8s = ".kube/config" nocase
+        $sa = "service_account" nocase
+    condition:
+        2 of them
+}
+
+rule HawkScan_Container_Escape
+{
+    meta:
+        description = "Container escape / Docker socket abuse"
+        severity = "high"
+        category = "cloud"
+    strings:
+        $sock = "/var/run/docker.sock"
+        $nsenter = "nsenter" nocase
+        $proc1 = "/proc/1/root"
+        $priv = "--privileged" nocase
+        $cap = "cap_sys_admin" nocase
+        $release = "release_agent" nocase
+    condition:
+        $sock or ($nsenter and $proc1) or $release or ($priv and $cap)
+}
+
+rule HawkScan_Kubernetes_Attack
+{
+    meta:
+        description = "Kubernetes service-account / secret abuse"
+        severity = "medium"
+        category = "cloud"
+    strings:
+        $sa = "/var/run/secrets/kubernetes.io/serviceaccount" nocase
+        $api = "kubernetes.default.svc" nocase
+        $kubectl = "kubectl" nocase
+        $secrets = "get secrets" nocase
+        $token = "serviceaccount/token" nocase
+    condition:
+        ($sa and ($api or $token)) or ($kubectl and $secrets)
+}
+
+rule HawkScan_Cloud_Cryptojacking
+{
+    meta:
+        description = "Cloud-focused cryptojacking / resource hijack"
+        severity = "high"
+        category = "miner"
+    strings:
+        $miner = "xmrig" nocase
+        $stratum = "stratum+tcp" nocase
+        $kill = "kill -9" nocase
+        $chattr = "chattr" nocase
+        $cron = "/etc/cron" nocase
+        $kdevtmpfsi = "kdevtmpfsi" nocase
+        $kinsing = "kinsing" nocase
+    condition:
+        ($miner or $stratum) and 1 of ($kill,$chattr,$cron) or any of ($kdevtmpfsi,$kinsing)
+}
+
+rule HawkScan_Cloud_Exfil_To_Storage
+{
+    meta:
+        description = "Data exfiltration to cloud storage"
+        severity = "medium"
+        category = "exfiltration"
+    strings:
+        $s3 = "s3://" nocase
+        $awscp = "aws s3 cp" nocase
+        $gsutil = "gsutil cp" nocase
+        $azcopy = "azcopy" nocase
+        $rclone = "rclone" nocase
+    condition:
+        ($s3 and $awscp) or $gsutil or $azcopy or ($rclone and $s3)
+}

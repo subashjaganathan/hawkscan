@@ -3,6 +3,7 @@
 from .base import Analyzer, AnalysisContext
 from .entropy import EntropyAnalyzer
 from .strings_analyzer import StringsAnalyzer
+from .secrets_analyzer import SecretsAnalyzer
 from .pe_analyzer import PEAnalyzer
 from .elf_analyzer import ELFAnalyzer
 from .macho_analyzer import MachOAnalyzer
@@ -27,6 +28,7 @@ from .yara_analyzer import YaraAnalyzer
 ALL_ANALYZERS: list[type[Analyzer]] = [
     EntropyAnalyzer,
     StringsAnalyzer,
+    SecretsAnalyzer,
     PEAnalyzer,
     ELFAnalyzer,
     MachOAnalyzer,

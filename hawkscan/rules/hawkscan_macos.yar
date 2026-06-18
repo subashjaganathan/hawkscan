@@ -102,3 +102,36 @@ rule HawkScan_macOS_Download_Exec
     condition:
         ($a and ($b or $d or $e)) or ($a and $c) or ($f and $c)
 }
+
+rule HawkScan_macOS_Stealer
+{
+    meta:
+        description = "macOS infostealer combo (fake password prompt + exfil)"
+        severity = "high"
+        category = "infostealer"
+    strings:
+        $p1 = "display dialog" nocase
+        $p2 = "password" nocase
+        $p3 = "with hidden answer" nocase
+        $k = "login.keychain" nocase
+        $b = "Cookies.binarycookies" nocase
+        $exf1 = "curl" nocase
+        $w = "Library/Application Support" nocase
+    condition:
+        ($p1 and $p2 and $p3) or ($k and $exf1) or ($b and $w and $exf1)
+}
+
+rule HawkScan_macOS_Dylib_Hijack
+{
+    meta:
+        description = "Dylib hijacking / insecure load path"
+        severity = "medium"
+        category = "persistence"
+    strings:
+        $a = "DYLD_INSERT_LIBRARIES" nocase
+        $b = "@rpath" nocase
+        $c = "@executable_path" nocase
+        $d = "LC_LOAD_WEAK_DYLIB" nocase
+    condition:
+        $a or ($d and ($b or $c))
+}
