@@ -205,7 +205,9 @@ rule HawkScan_Reverse_Shell
         $h = "TCPClient" nocase
         $i = "subprocess" nocase
     condition:
-        ($a and ($b or $g)) or $c or ($f and $h) or ($d and $i)
+        // socket+subprocess alone is common in legitimate code; require an
+        // actual shell-invocation string too.
+        ($a and ($b or $g)) or $c or ($f and $h) or ($d and $i and ($b or $g))
 }
 
 rule HawkScan_Keylogger
@@ -222,5 +224,7 @@ rule HawkScan_Keylogger
         $e = "[BACKSPACE]" nocase
         $f = "keylog" nocase
     condition:
-        ($a and $c) or ($b and ($d or $e)) or $f
+        // Capture APIs alone are common in GUI apps; require keystroke-log
+        // formatting strings or the explicit "keylog" marker.
+        $f or ($b and ($d or $e)) or ($a and $c and ($d or $e))
 }

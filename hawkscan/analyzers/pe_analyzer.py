@@ -85,11 +85,13 @@ class PEAnalyzer(Analyzer):
         # anti-analysis technique.
         tls = getattr(pe, "DIRECTORY_ENTRY_TLS", None)
         if tls and getattr(tls.struct, "AddressOfCallBacks", 0):
+            # Informational: TLS callbacks are common in legitimate CRT binaries
+            # for thread-local init, so this should not drive the verdict alone.
             yield Finding(
                 analyzer=self.name, title="TLS callback(s) present",
-                severity=Severity.MEDIUM, category="anti-analysis",
+                severity=Severity.INFO, category="anti-analysis",
                 detail="Code referenced via TLS callbacks executes before main(); "
-                       "often used for early execution or anti-debugging.")
+                       "can be used for early execution / anti-debugging.")
 
         is_dll = bool(pe.FILE_HEADER.Characteristics & 0x2000)
         yield Finding(

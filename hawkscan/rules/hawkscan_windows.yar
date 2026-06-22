@@ -30,11 +30,14 @@ rule HawkScan_ETW_Patch
         category = "defense-evasion"
     strings:
         $a = "EtwEventWrite" nocase
-        $b = "ntdll" nocase
-        $c = "EtwEventRegister" nocase
-        $log = "EtwpEventWrite" nocase
+        $amsi1 = "AmsiScanBuffer" nocase
+        $amsi2 = "amsiInitFailed" nocase
+        $patch = "VirtualProtect" nocase
+        $ntp = "NtProtectVirtualMemory" nocase
     condition:
-        ($a and $b) or $log or ($c and $a)
+        // ETW telemetry tampering combined with AMSI bypass / memory patching is
+        // a real evasion combo; ETW APIs alone are common in legitimate software.
+        $a and (any of ($amsi1, $amsi2)) and (any of ($patch, $ntp))
 }
 
 rule HawkScan_Defender_Tamper

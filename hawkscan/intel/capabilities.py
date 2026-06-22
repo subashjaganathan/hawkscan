@@ -370,9 +370,10 @@ COMBINATIONS: list[Combo] = [
         name="Token impersonation",
         any_of=["DuplicateTokenEx", "ImpersonateLoggedOnUser",
                 "AdjustTokenPrivileges"],
-        min_count=2, severity="medium", category="Privilege Escalation",
+        min_count=2, severity="low", category="Privilege Escalation",
         mitre=("T1134.001", "Token Impersonation/Theft"),
-        detail="Token duplication/impersonation primitives present together.",
+        detail="Token duplication/impersonation primitives (also common in "
+               "legitimate privileged services).",
     ),
 ]
 

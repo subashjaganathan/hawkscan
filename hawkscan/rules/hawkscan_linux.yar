@@ -20,7 +20,9 @@ rule HawkScan_Linux_Download_Pipe_Shell
         $sh4 = "bash -c" nocase
         $b64 = "base64 -d" nocase
     condition:
-        (($w or $c) and any of ($sh1,$sh2,$sh3)) or ($b64 and $sh4)
+        // Not a Windows PE (these shell strings appear inside legit PE resources).
+        not (uint16(0) == 0x5A4D) and
+        ((($w or $c) and any of ($sh1,$sh2,$sh3)) or ($b64 and $sh4))
 }
 
 rule HawkScan_Linux_Persistence

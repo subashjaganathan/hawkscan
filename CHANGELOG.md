@@ -2,6 +2,22 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.4.1]
+
+### Fixed
+- **False-positive reduction** from a 513-file clean-corpus sweep (7.8% -> 0.8%
+  on known-good files), with all true positives preserved:
+  - ETW-patch rule now requires a combined AMSI-bypass / memory-patching context
+    (ETW APIs alone are common in legitimate binaries).
+  - TLS-callback finding downgraded to informational (common in CRT binaries).
+  - Linux download-pipe and reverse-shell rules no longer match Windows PEs;
+    reverse-shell requires an actual shell-invocation string.
+  - Keylogger rule requires keystroke-log formatting strings, not just capture
+    APIs (common in GUI apps).
+  - Generic eval()/Execute() downgraded to low (legitimate in e.g. Python
+    stdlib); PowerShell/WScript download-and-run primitives stay high.
+  - Token-impersonation capability downgraded to low (common in legit services).
+
 ## [1.4.0]
 
 ### Added

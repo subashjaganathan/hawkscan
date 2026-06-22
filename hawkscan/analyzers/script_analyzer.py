@@ -108,22 +108,24 @@ class ScriptAnalyzer(Analyzer):
                            "PowerShell/JS.",
                 )
 
-        # Dangerous dynamic-eval constructs by language.
+        # Dynamic-eval constructs by language. (label, severity). Generic eval()/
+        # Execute() are common in legitimate code (e.g. Python stdlib), so they
+        # are LOW; PowerShell/WScript download-and-run primitives stay HIGH.
         eval_markers = {
-            "iex": "PowerShell Invoke-Expression",
-            "invoke-expression": "PowerShell Invoke-Expression",
-            "eval(": "eval() dynamic execution",
-            "execute(": "VBScript Execute",
-            "executeglobal": "VBScript ExecuteGlobal",
-            "wscript.shell": "WScript.Shell command execution",
-            "frombase64string": "Base64 decode-and-run",
+            "iex": ("PowerShell Invoke-Expression", Severity.HIGH),
+            "invoke-expression": ("PowerShell Invoke-Expression", Severity.HIGH),
+            "wscript.shell": ("WScript.Shell command execution", Severity.HIGH),
+            "frombase64string": ("Base64 decode-and-run", Severity.HIGH),
+            "eval(": ("eval() dynamic execution", Severity.LOW),
+            "execute(": ("VBScript Execute", Severity.LOW),
+            "executeglobal": ("VBScript ExecuteGlobal", Severity.MEDIUM),
         }
-        for marker, label in eval_markers.items():
+        for marker, (label, sev) in eval_markers.items():
             if marker in lowered:
                 yield Finding(
                     analyzer=self.name,
                     title=label,
-                    severity=Severity.HIGH,
+                    severity=sev,
                     category="execution",
                     detail=f"Script contains {marker!r}.",
                 )
