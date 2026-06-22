@@ -2,6 +2,22 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.3.0]
+
+### Added
+- **PDF stream decompression**: FlateDecode object streams are decompressed and
+  inspected, catching JavaScript / embedded executables hidden in compressed
+  streams (invisible to raw-keyword scanning).
+- **Recursive archive scanning**: ZIP members are extracted and re-scanned, so a
+  malicious file packed inside an archive is analysed on its own (bounded;
+  encrypted/oversized members and zip bombs are skipped).
+
+### Fixed
+- **Document/data over-flagging**: non-executable formats (.md, .txt, .log,
+  .json, .yaml, config, etc.) no longer produce a heuristic verdict above Low
+  Risk - keyword/IOC hits in docs, detection rules and logs are descriptive, not
+  behavioural. A CRITICAL hit still escalates.
+
 ## [1.2.0]
 
 ### Added

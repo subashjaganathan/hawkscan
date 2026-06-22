@@ -58,3 +58,47 @@ class PDFAnalyzer(Analyzer):
                 detail="PDF object names use #-hex escapes to hide keywords from "
                        "naive scanners.",
             )
+
+        # Decompress FlateDecode streams and inspect the decoded content: PDF
+        # malware commonly hides JavaScript inside compressed object streams that
+        # raw-keyword scanning cannot see.
+        yield from self._scan_streams(data)
+
+    def _scan_streams(self, data: bytes) -> Iterable[Finding]:
+        import zlib
+        flagged = False
+        # Each "stream ... endstream" body that follows a /FlateDecode filter.
+        for m in re.finditer(rb"stream\r?\n", data):
+            start = m.end()
+            end = data.find(b"endstream", start)
+            if end == -1:
+                continue
+            blob = data[start:end].rstrip(b"\r\n")
+            # Only attempt zlib-compressed streams (zlib header 0x78).
+            if not blob[:1] == b"\x78":
+                continue
+            try:
+                dec = zlib.decompress(blob)
+            except Exception:
+                continue
+            low = dec.lower()
+            if (b"/js" in low or b"javascript" in low or b"eval(" in low
+                    or b"unescape(" in low or b"app.alert" in low
+                    or b"this.exportdataobject" in low):
+                yield Finding(
+                    analyzer=self.name,
+                    title="JavaScript inside a compressed PDF stream",
+                    severity=Severity.HIGH, category="execution",
+                    detail="Decompressed a FlateDecode stream and found JavaScript; "
+                           "hidden from raw-keyword scanning.")
+                flagged = True
+            if not flagged and (b"%pdf" in low and b"this program cannot be run"
+                                in low):
+                yield Finding(
+                    analyzer=self.name,
+                    title="Embedded executable in a compressed PDF stream",
+                    severity=Severity.HIGH, category="dropper",
+                    detail="A decompressed stream contains an embedded PE.")
+                flagged = True
+            if flagged:
+                return

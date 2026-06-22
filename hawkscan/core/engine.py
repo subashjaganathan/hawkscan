@@ -84,6 +84,14 @@ DEFAULT_MAX_SCAN_SIZE = 256 * 1024 * 1024  # 256 MiB
 from . import config as _config  # noqa: E402
 CATEGORY_SCORE_CAP = _config.category_cap()
 
+# Non-executable document/data formats. Keyword/IOC matches in these are usually
+# descriptive (docs, detection rules, logs), so a heuristic-only verdict on them
+# is capped. A YARA or CRITICAL hit still escalates (e.g. a ransom note).
+_INERT_DOC_EXTS = {
+    ".md", ".rst", ".txt", ".log", ".csv", ".tsv", ".json", ".yaml", ".yml",
+    ".toml", ".ini", ".cfg", ".conf", ".tex", ".rtfd",
+}
+
 # Per-user hash lists (SHA-256, one per line, '#' comments). The allowlist marks
 # known-good files (forced Clean); the denylist marks known-bad files (forced
 # Malicious) for instant offline detection of samples you have already triaged.
@@ -255,24 +263,38 @@ class Engine:
         result.raw_score, result.score = self._score(result.findings)
         result.verdict = score_to_verdict(result.score)
 
-        # A valid digital signature is a strong benign signal: cap a heuristic
-        # verdict so validly-signed system binaries (e.g. catalog-signed Windows
-        # DLLs that legitimately import injection APIs) are not flagged. Known-bad
-        # signals still escalate: denylist/hashdb short-circuit earlier, and any
-        # CRITICAL finding (known-bad YARA, EICAR) bypasses the cap.
+        # Verdict caps for strong benign context. Both cap heuristic-only
+        # verdicts to Low Risk; a CRITICAL finding (known-bad YARA, EICAR) or a
+        # YARA match always bypasses, and denylist/hashdb short-circuit earlier.
         if result.verdict > Verdict.LOW_RISK:
+            has_critical = any(f.severity >= Severity.CRITICAL for f in result.findings)
+            has_yara = any(f.analyzer == "yara" for f in result.findings)
+
+            # (a) Validly-signed binaries (e.g. catalog-signed system DLLs that
+            # legitimately import injection APIs) should not be flagged.
             signed_valid = any(
                 f.analyzer == "pe" and f.category == "signature"
                 and f.title.startswith("Digitally signed (valid)")
                 for f in result.findings)
-            has_critical = any(f.severity >= Severity.CRITICAL for f in result.findings)
-            if signed_valid and not has_critical:
+            # (b) Inert documents/data (markdown, text, logs, config) have no
+            # execution vector; keyword/IOC/rule hits there are descriptive
+            # (security docs, detection rules) rather than behavioural, so only a
+            # CRITICAL hit bypasses their cap.
+            inert_doc = info.extension in _INERT_DOC_EXTS
+
+            cap = why = None
+            if not has_critical:
+                if inert_doc:
+                    cap, why = True, "non-executable document/data file"
+                elif signed_valid and not has_yara:
+                    cap, why = True, "file carries a valid signature"
+            if cap:
                 result.findings.append(Finding(
                     analyzer="engine",
-                    title="Verdict capped: file carries a valid signature",
-                    severity=Severity.INFO, category="signature",
-                    detail="Heuristic findings are present but the file is validly "
-                           "signed; verdict capped to Low Risk. Review the signer."))
+                    title=f"Verdict capped: {why}",
+                    severity=Severity.INFO, category="context",
+                    detail="Heuristic findings present but the context is strongly "
+                           "benign; verdict capped to Low Risk."))
                 result.verdict = Verdict.LOW_RISK
 
         result.duration_ms = (time.perf_counter() - start) * 1000

@@ -75,7 +75,8 @@ class ArchiveAnalyzer(Analyzer):
         # Zip-bomb heuristic: extreme compression ratio.
         total_comp = sum(i.compress_size for i in infos) or 1
         total_uncomp = sum(i.file_size for i in infos)
-        if total_uncomp / total_comp > 100 and total_uncomp > 50 * 1024 * 1024:
+        bomb = total_uncomp / total_comp > 100 and total_uncomp > 50 * 1024 * 1024
+        if bomb:
             yield Finding(
                 analyzer=self.name,
                 title=f"Extreme compression ratio ({total_uncomp // total_comp}:1)",
@@ -83,3 +84,53 @@ class ArchiveAnalyzer(Analyzer):
                 category="dos",
                 detail="Possible decompression bomb.",
             )
+
+        # Recurse: extract members and re-scan each so a malicious file packed
+        # inside the archive is analysed on its own. Bounded to avoid zip bombs.
+        if not bomb:
+            yield from self._scan_members(ctx, infos)
+
+    def _scan_members(self, ctx, infos) -> Iterable[Finding]:
+        from ..core.engine import Engine
+        from ..analyzers import ALL_ANALYZERS
+        import tempfile
+        from pathlib import Path
+
+        members = [i for i in infos if not i.is_dir()
+                   and 0 < i.file_size <= 16 * 1024 * 1024
+                   and not (i.flag_bits & 0x1)][:10]  # skip encrypted/huge; cap 10
+        if not members:
+            return
+        # Sub-engine without ArchiveAnalyzer to bound recursion depth to 1.
+        sub = Engine(analyzers=[c for c in ALL_ANALYZERS
+                                if c is not ArchiveAnalyzer])
+        from ..core.findings import Verdict, Severity as Sev
+        tmp = Path(tempfile.mkdtemp(prefix="hawkscan_arc_"))
+        try:
+            with zipfile.ZipFile(ctx.path) as zf:
+                for m in members:
+                    try:
+                        blob = zf.read(m)
+                    except Exception:
+                        continue
+                    out = tmp / Path(m.filename).name
+                    try:
+                        out.write_bytes(blob)
+                        res = sub.scan(out)
+                    except Exception:
+                        continue
+                    finally:
+                        out.unlink(missing_ok=True)
+                    if res.verdict >= Verdict.SUSPICIOUS:
+                        sev = (Sev.HIGH if res.verdict >= Verdict.LIKELY_MALICIOUS
+                               else Sev.MEDIUM)
+                        yield Finding(
+                            analyzer=self.name,
+                            title=f"Archived member is {res.verdict.label}: "
+                                  f"{m.filename}",
+                            severity=sev, category="dropper",
+                            detail="A file inside the archive scanned as "
+                                   f"{res.verdict.label}.")
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)

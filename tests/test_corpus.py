@@ -94,6 +94,38 @@ def test_deobfuscation_recovers_hidden_stager(tmp_path):
     assert any(f.analyzer == "deobfuscate" for f in r.findings)
 
 
+def test_inert_document_verdict_capped(tmp_path):
+    # A markdown doc full of malware keywords (e.g. security docs) must not be
+    # flagged above Low Risk - it has no execution vector.
+    md = (b"# Detection notes\n\n"
+          b"Look for `powershell -w hidden -enc`, `vssadmin delete shadows`,\n"
+          b"`Invoke-Expression`, and IMDS theft via 169.254.169.254.\n")
+    r = _scan(tmp_path, "notes.md", md)
+    assert r.verdict <= Verdict.LOW_RISK
+
+
+def test_compressed_pdf_javascript(tmp_path):
+    import zlib
+    js = b"<< /JS (app.alert('x'); eval(unescape('%75'))) /S /JavaScript >>"
+    stream = zlib.compress(js)
+    pdf = (b"%PDF-1.7\n1 0 obj\n<< /Filter /FlateDecode /Length "
+           + str(len(stream)).encode() + b" >>\nstream\n" + stream
+           + b"\nendstream\nendobj\n")
+    r = _scan(tmp_path, "x.pdf", pdf)
+    assert any("compressed PDF stream" in f.title for f in r.findings)
+
+
+def test_archive_member_rescanned(tmp_path):
+    import zipfile
+    inj = (b"MZ VirtualAllocEx WriteProcessMemory CreateRemoteThread "
+           b"SetThreadContext NtUnmapViewOfSection")
+    f = tmp_path / "nested.zip"
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("invoice.exe", inj)
+    res = ENGINE.scan(f)
+    assert any("Archived member" in x.title for x in res.findings)
+
+
 def test_masqueraded_executable(tmp_path):
     # A PE wearing a .jpg extension - at least low risk from the mismatch.
     r = _scan(tmp_path, "photo.jpg", b"MZ\x90\x00" + b"\x00" * 200)
