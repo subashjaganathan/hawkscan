@@ -2,6 +2,21 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.2.0]
+
+### Added
+- **DLL export analysis**: flags reflective-loader exports (reflective DLL
+  injection), regsvr32-loadable COM entry points, tiny generic-name export
+  tables (loader/beacon trait), and fully-forwarding DLLs (proxying/hijack).
+
+### Fixed
+- **False positives on validly-signed system binaries** (e.g. kernel32):
+  - A valid Authenticode/catalog signature now caps a heuristic-only verdict to
+    Low Risk (known-bad signals and CRITICAL findings still escalate).
+  - Removed the redundant single-API-name string patterns (e.g. a lone
+    "VirtualAlloc") that false-positived on DLLs exporting those names; API
+    capabilities are scored by the capability analyzer with combination logic.
+
 ## [1.1.0]
 
 ### Added

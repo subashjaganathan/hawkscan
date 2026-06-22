@@ -49,8 +49,9 @@ _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern, str, Severity, str]] = [
      "Dynamic code execution (IEX)", Severity.HIGH, "execution"),
     (re.compile(r"FromBase64String|base64.{0,10}decode", re.I),
      "Base64 decoding routine", Severity.LOW, "obfuscation"),
-    (re.compile(r"\bVirtualAlloc(?:Ex)?\b|WriteProcessMemory|CreateRemoteThread", re.I),
-     "Process-injection API reference", Severity.HIGH, "injection"),
+    # Note: raw injection/keylogging API *names* are handled by the capability
+    # analyzer (with combination logic), not flagged here - a single API name as
+    # a string is weak signal and false-positives on system DLLs that export it.
     (re.compile(r"\bcmd(?:\.exe)?\s*/c\b", re.I),
      "Command shell invocation", Severity.LOW, "execution"),
     (re.compile(r"schtasks|New-ScheduledTask|/Create\s+/SC", re.I),
@@ -63,8 +64,8 @@ _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern, str, Severity, str]] = [
      "Possible Bitcoin address", Severity.MEDIUM, "ransomware"),
     (re.compile(r"\.onion\b", re.I),
      "Tor hidden-service (.onion) reference", Severity.MEDIUM, "network"),
-    (re.compile(r"keylog|GetAsyncKeyState|SetWindowsHookEx", re.I),
-     "Keylogging API reference", Severity.HIGH, "spyware"),
+    (re.compile(r"\bkeylog(?:ger|ging)?\b", re.I),
+     "Keylogging reference", Severity.MEDIUM, "spyware"),
 ]
 
 

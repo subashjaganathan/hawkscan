@@ -56,6 +56,15 @@ def test_strings_detects_powershell_cradle(tmp_path):
     assert any("Dynamic code execution" in t for t in titles)
 
 
+def test_lone_api_name_not_flagged_as_injection(tmp_path):
+    # A single API name as a string must NOT produce a high injection finding;
+    # that is the capability analyzer's job (with combination logic). Prevents
+    # false positives on system DLLs that legitimately export these names.
+    ctx = _ctx(tmp_path, "x.bin", b"this module imports VirtualAlloc only")
+    titles = [f.title for f in StringsAnalyzer().analyze(ctx)]
+    assert not any("Process-injection API reference" in t for t in titles)
+
+
 def test_strings_extracts_urls(tmp_path):
     data = b"connect to http://evil.example.com/payload and http://c2.example.net"
     ctx = _ctx(tmp_path, "s.bin", data)

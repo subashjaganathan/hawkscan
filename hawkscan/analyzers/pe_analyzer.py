@@ -58,6 +58,7 @@ class PEAnalyzer(Analyzer):
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_SECURITY"],
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"],
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_TLS"],
+            pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXPORT"],
         ])
 
         # imphash (import-table fingerprint) + rich header hash: both are
@@ -171,6 +172,9 @@ class PEAnalyzer(Analyzer):
                 detail="Missing/empty imports often indicate a packed binary that "
                        "resolves APIs dynamically at runtime.",
             )
+
+        # Export table analysis (DLLs). Tell-tale exports reveal malicious DLLs.
+        yield from self._analyze_exports(pe)
 
         # Authenticode presence (not validity — that needs OS APIs).
         sec_dir = pe.OPTIONAL_HEADER.DATA_DIRECTORY[
@@ -301,6 +305,61 @@ class PEAnalyzer(Analyzer):
                     detail="A resource entry begins with an executable header; "
                            "the binary carries an embedded payload.",
                 )
+
+    # Generic export names that, when they dominate a small export table, are
+    # typical of beacon/loader DLLs rather than legitimate libraries.
+    _GENERIC_EXPORTS = {"start", "run", "main", "init", "voidfunc", "go", "x",
+                        "load", "begin", "exec", "doit"}
+
+    def _analyze_exports(self, pe) -> Iterable[Finding]:
+        exp = getattr(pe, "DIRECTORY_ENTRY_EXPORT", None)
+        if not exp or not getattr(exp, "symbols", None):
+            return
+        names, forwarders = [], 0
+        for sym in exp.symbols:
+            if sym.name:
+                names.append(sym.name.decode("latin1", "ignore"))
+            if getattr(sym, "forwarder", None):
+                forwarders += 1
+
+        yield Finding(analyzer=self.name,
+                      title=f"DLL with {len(names)} named export(s)",
+                      severity=Severity.INFO, category="exports",
+                      data={"exports": names[:50]})
+
+        lower = {n.lower() for n in names}
+
+        # Reflective loader export = reflective DLL injection (e.g. Cobalt Strike).
+        if any("reflectiveloader" in n for n in lower):
+            yield Finding(
+                analyzer=self.name, title="Reflective loader export",
+                severity=Severity.HIGH, category="injection",
+                detail="Exports a ReflectiveLoader; used for reflective DLL "
+                       "injection. ATT&CK: T1620 Reflective Code Loading.")
+
+        # regsvr32-loadable entry points (also legitimate COM, so informational).
+        com = lower & {"dllregisterserver", "dllinstall", "dllunregisterserver"}
+        if com:
+            yield Finding(
+                analyzer=self.name,
+                title=f"COM/regsvr32 entry point(s): {', '.join(sorted(com))}",
+                severity=Severity.INFO, category="exports",
+                detail="DLL can be loaded via regsvr32; common LOLBin execution path.")
+
+        # A small export table made up of generic names is a loader/beacon trait.
+        if names and len(names) <= 4 and lower and lower <= self._GENERIC_EXPORTS:
+            yield Finding(
+                analyzer=self.name,
+                title=f"DLL exports only generic names ({', '.join(sorted(lower))})",
+                severity=Severity.MEDIUM, category="exports",
+                detail="A tiny export table of generic names is typical of "
+                       "injected loader/beacon DLLs rather than real libraries.")
+
+        if forwarders and forwarders == len(exp.symbols):
+            yield Finding(
+                analyzer=self.name, title="All exports are forwarders",
+                severity=Severity.MEDIUM, category="exports",
+                detail="Fully-forwarding DLL; can indicate DLL proxying/hijacking.")
 
     @staticmethod
     def _version_info(pe) -> dict:

@@ -206,7 +206,7 @@ findings, every decision is auditable and the thresholds are tuned in one place.
 | Entropy | Packing, encryption or compression |
 | Strings | Embedded URLs/IPs, download and execution primitives, persistence, ransomware and spyware indicators |
 | Secrets and cloud | Leaked AWS/GCP/Azure credentials, private keys, tokens, IMDS theft, container escape, Kubernetes and cloud exfil abuse |
-| PE (Windows) | Imports with addresses, sections and entropy, packers, signature verification (embedded and catalog), overlay, resources, version info, imphash, rich header, TLS callbacks |
+| PE (Windows) | Imports with addresses, exports (reflective loaders, proxying), sections and entropy, packers, signature verification (embedded and catalog), overlay, resources, version info, imphash, rich header, TLS callbacks |
 | .NET | CLR metadata parsing, IL user strings, symbol obfuscation detection |
 | ELF (Linux) | Architecture, ptrace anti debugging, persistence and rootkit indicators |
 | Mach-O (macOS) | File type, code signature, persistence indicators |

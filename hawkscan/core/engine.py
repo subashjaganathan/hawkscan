@@ -254,6 +254,27 @@ class Engine:
         result.findings = self._dedup(result.findings)
         result.raw_score, result.score = self._score(result.findings)
         result.verdict = score_to_verdict(result.score)
+
+        # A valid digital signature is a strong benign signal: cap a heuristic
+        # verdict so validly-signed system binaries (e.g. catalog-signed Windows
+        # DLLs that legitimately import injection APIs) are not flagged. Known-bad
+        # signals still escalate: denylist/hashdb short-circuit earlier, and any
+        # CRITICAL finding (known-bad YARA, EICAR) bypasses the cap.
+        if result.verdict > Verdict.LOW_RISK:
+            signed_valid = any(
+                f.analyzer == "pe" and f.category == "signature"
+                and f.title.startswith("Digitally signed (valid)")
+                for f in result.findings)
+            has_critical = any(f.severity >= Severity.CRITICAL for f in result.findings)
+            if signed_valid and not has_critical:
+                result.findings.append(Finding(
+                    analyzer="engine",
+                    title="Verdict capped: file carries a valid signature",
+                    severity=Severity.INFO, category="signature",
+                    detail="Heuristic findings are present but the file is validly "
+                           "signed; verdict capped to Low Risk. Review the signer."))
+                result.verdict = Verdict.LOW_RISK
+
         result.duration_ms = (time.perf_counter() - start) * 1000
         return result
 
