@@ -1,0 +1,163 @@
+/*
+ * HawkScan attack-technique rules (original).
+ * High-signal detections for active exploitation, living-off-the-land abuse,
+ * credential access, defense evasion / anti-forensics, discovery, and webshell
+ * managers. Conservative multi-string conditions; exploitation strings are
+ * near-zero false positive.
+ */
+
+rule HawkScan_Exploit_Log4Shell
+{
+    meta:
+        description = "Log4Shell (CVE-2021-44228) JNDI injection"
+        severity = "critical"
+        category = "exploit"
+    strings:
+        $a = "${jndi:ldap" nocase
+        $b = "${jndi:rmi" nocase
+        $c = "${jndi:dns" nocase
+        $d = "${jndi:ldaps" nocase
+        $e = "${${::-j}" nocase            // obfuscated ${jndi}
+        $f = "${lower:jndi}" nocase
+    condition:
+        any of them
+}
+
+rule HawkScan_Exploit_ProxyShell_ProxyLogon
+{
+    meta:
+        description = "Exchange ProxyShell / ProxyLogon exploitation"
+        severity = "high"
+        category = "exploit"
+    strings:
+        $a = "/autodiscover/autodiscover.json" nocase
+        $b = "X-AnonResource-Backend" nocase
+        $c = "X-BEResource" nocase
+        $d = "/powershell" nocase
+        $e = "Email=autodiscover/autodiscover.json" nocase
+    condition:
+        $b or $c or ($a and $d) or $e
+}
+
+rule HawkScan_Exploit_Spring4Shell
+{
+    meta:
+        description = "Spring4Shell (CVE-2022-22965) class loader manipulation"
+        severity = "high"
+        category = "exploit"
+    strings:
+        $a = "class.module.classLoader" nocase
+        $b = "getCachedIntrospectionResults" nocase
+        $c = ".jsp" nocase
+        $d = "Runtime" nocase
+    condition:
+        ($a and (any of ($c, $d))) or $b
+}
+
+rule HawkScan_Exploit_PrintNightmare
+{
+    meta:
+        description = "PrintNightmare (CVE-2021-34527) spooler driver abuse"
+        severity = "high"
+        category = "exploit"
+    strings:
+        $a = "AddPrinterDriverEx" nocase
+        $b = "spoolsv.exe" nocase
+        $c = "System32\\spool\\drivers" nocase
+        $d = "EnumPrinterDrivers" nocase
+    condition:
+        $a and any of ($b, $c, $d)
+}
+
+rule HawkScan_LOLBin_Abuse_Extended
+{
+    meta:
+        description = "Living-off-the-land binary abuse (extended set)"
+        severity = "medium"
+        category = "execution"
+    strings:
+        $mav = "mavinject" nocase
+        $mavarg = "/INJECTRUNNING" nocase
+        $wmic = "wmic process call create" nocase
+        $msb = "msbuild" nocase
+        $inst = "installutil" nocase
+        $regasm = "regasm" nocase
+        $forf = "forfiles" nocase
+        $msdt = "ms-msdt" nocase
+        $cmstp = "cmstp" nocase
+    condition:
+        ($mav and $mavarg) or $wmic or 2 of ($msb, $inst, $regasm, $forf, $msdt, $cmstp)
+}
+
+rule HawkScan_Credential_Access_Extended
+{
+    meta:
+        description = "Credential access: SAM/NTDS dump, vault, LaZagne"
+        severity = "high"
+        category = "credential-access"
+    strings:
+        $sam = "reg save" nocase
+        $samk = "hklm\\sam" nocase
+        $sec = "hklm\\security" nocase
+        $ntds = "ntds.dit" nocase
+        $ntdsutil = "ntdsutil" nocase
+        $comsvcs = "comsvcs.dll" nocase
+        $minidump = "MiniDump" nocase
+        $vault = "vaultcmd" nocase
+        $lazagne = "lazagne" nocase
+    condition:
+        ($sam and any of ($samk, $sec)) or ($ntds and $ntdsutil)
+        or ($comsvcs and $minidump) or $lazagne or $vault
+}
+
+rule HawkScan_DefenseEvasion_AntiForensics
+{
+    meta:
+        description = "Defense evasion: log clearing, AV/firewall disable, timestomp"
+        severity = "high"
+        category = "defense-evasion"
+    strings:
+        $wev = "wevtutil" nocase
+        $cl = "cl " nocase
+        $clog = "Clear-EventLog" nocase
+        $fw = "netsh advfirewall set" nocase
+        $off = "state off" nocase
+        $defoff = "DisableRealtimeMonitoring" nocase
+        $ts = "timestomp" nocase
+    condition:
+        ($wev and $cl) or $clog or ($fw and $off) or $defoff or $ts
+}
+
+rule HawkScan_Discovery_Recon
+{
+    meta:
+        description = "Host / domain reconnaissance commands"
+        severity = "medium"
+        category = "discovery"
+    strings:
+        $a = "whoami /priv" nocase
+        $b = "net group \"domain admins\"" nocase
+        $c = "nltest /domain_trusts" nocase
+        $d = "SharpHound" nocase
+        $e = "BloodHound" nocase
+        $f = "net group /domain" nocase
+    condition:
+        any of them
+}
+
+rule HawkScan_Webshell_Managers
+{
+    meta:
+        description = "Known webshell manager artefacts (Godzilla/Behinder/AntSword)"
+        severity = "high"
+        category = "webshell"
+    strings:
+        $god = "Godzilla" nocase
+        $beh = "Behinder" nocase
+        $ant = "antSword" nocase
+        $rebeyond = "rebeyond" nocase
+        $pass = "pass=" nocase
+        $key = "key=" nocase
+    condition:
+        $rebeyond or ($ant and $pass) or ($god and $key) or ($beh and $key)
+}

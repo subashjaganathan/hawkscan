@@ -2,6 +2,16 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.4.0]
+
+### Added
+- **Attack-technique rule pack** (`hawkscan_attack.yar`): exploitation strings
+  (Log4Shell, ProxyShell/ProxyLogon, Spring4Shell, PrintNightmare), extended
+  living-off-the-land binary abuse, credential access (SAM/NTDS dump, vault,
+  LaZagne), defense evasion / anti-forensics (event-log clearing, AV/firewall
+  disable, timestomp), discovery/recon, and webshell-manager artefacts.
+- Bundled rule set now 77 rules across 11 packs.
+
 ## [1.3.0]
 
 ### Added

