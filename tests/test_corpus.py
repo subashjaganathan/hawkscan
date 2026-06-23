@@ -145,6 +145,18 @@ def test_clean_binary_not_xor_flagged(tmp_path):
                    for f in r.findings)
 
 
+def test_js_deobfuscation_reveals_c2(tmp_path):
+    # Obfuscated JS (fromCharCode + \x) hiding a C2 URL must be deobfuscated and
+    # the recovered URL surfaced as an IOC.
+    js = (r'var a=String.fromCharCode(104,116,116,112,58,47,47)+'
+          r'"\x65\x76\x69\x6c\x2d\x63\x32\x2e\x63\x6f\x6d\x2f\x67\x61\x74\x65";'
+          r'eval("i"+"e"+"x");')
+    r = _scan(tmp_path, "d.js", js.encode())
+    deob = [f for f in r.findings if f.analyzer == "deobfuscate"]
+    assert deob and any("evil-c2.com" in i
+                        for f in deob for i in f.data.get("recovered_iocs", []))
+
+
 def test_script_dropper_named_exe(tmp_path):
     # Real-world miss: an obfuscated JS dropper named .exe was typed as opaque
     # "data" and scored Clean. It must now be typed as a script, flagged as

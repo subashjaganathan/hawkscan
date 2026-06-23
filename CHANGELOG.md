@@ -2,6 +2,16 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.7.0]
+
+### Added
+- **JavaScript / script deobfuscation**: unrolls common obfuscation
+  (`String.fromCharCode`, `\xNN` / `\uNNNN` escapes, `unescape('%NN')`, string
+  concatenation), re-scans the decoded result, and **surfaces the recovered IOCs
+  (C2 URLs / IPs)** in the finding - turning "this is an obfuscated dropper" into
+  "here is the URL it contacts". Each transform is gated on its trigger so normal
+  text is not mangled.
+
 ## [1.6.1]
 
 ### Fixed

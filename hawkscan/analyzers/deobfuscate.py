@@ -64,6 +64,11 @@ class DeobAnalyzer(Analyzer):
                 recovered.append(("UPX unpack", up))
 
         if ctx.info.file_type in {"script", "text"}:
+            # Unroll JS/script obfuscation (fromCharCode / \x / \u / unescape /
+            # string concat) to reveal hidden URLs and commands.
+            deob = self._script_deob(data)
+            if deob and deob != data and self._meaningful(deob):
+                recovered.append(("script deobfuscation", deob))
             blobs = self._decode_blobs(data)
             recovered.extend(blobs)
             # Multi-layer: a decoded blob may itself be XOR-encoded.
@@ -132,6 +137,43 @@ class DeobAnalyzer(Analyzer):
         return out
 
     @staticmethod
+    def _script_deob(data: bytes, max_size: int = 8 * 1024 * 1024) -> bytes:
+        """Unroll common JS/script obfuscation to reveal the underlying content:
+        String.fromCharCode(...), \\xNN / \\uNNNN escapes, unescape('%NN'), and
+        adjacent string concatenation. Each transform is gated on its trigger so
+        normal text is not mangled. Iterated a few times for layered cases."""
+        if not (32 <= len(data) <= max_size):
+            return b""
+        try:
+            text = data.decode("latin1", "ignore")
+        except Exception:
+            return b""
+
+        def _fcc(m):
+            nums = re.findall(r"\d+", m.group(1))
+            s = "".join(chr(int(n)) for n in nums if int(n) < 0x110000)
+            # Re-quote the decoded result (when safe) so adjacent string
+            # concatenation reassembles into a single literal (e.g. a full URL).
+            return f'"{s}"' if '"' not in s and "\n" not in s else s
+
+        for _ in range(4):
+            before = text
+            low = text.lower()
+            if "fromcharcode" in low:
+                text = re.sub(r"(?:String\.)?fromCharCode\(([\d,\s]+)\)", _fcc, text)
+            text = re.sub(r"\\x([0-9a-fA-F]{2})",
+                          lambda m: chr(int(m.group(1), 16)), text)
+            text = re.sub(r"\\u([0-9a-fA-F]{4})",
+                          lambda m: chr(int(m.group(1), 16)), text)
+            if "unescape" in low or "decodeuri" in low:
+                text = re.sub(r"%([0-9a-fA-F]{2})",
+                              lambda m: chr(int(m.group(1), 16)), text)
+            text = re.sub(r"""["']\s*\+\s*["']""", "", text)  # "a"+"b" -> "ab"
+            if text == before:
+                break
+        return text.encode("latin1", "ignore")
+
+    @staticmethod
     def _xor_recover(data: bytes, layer: str = "") -> list[tuple[str, bytes]]:
         """Brute single-byte XOR keys (1-255). If a known plaintext marker
         appears XOR'd with key K, decode the whole buffer with K and return it.
@@ -181,13 +223,23 @@ class DeobAnalyzer(Analyzer):
 
         sev = _VERDICT_SEV.get(res.verdict, Severity.INFO)
         top = [f.title for f in res.findings if f.severity >= Severity.MEDIUM][:4]
+        # Pull the concrete IOCs recovered from the hidden stage (URLs/IPs) so
+        # the analyst sees the actual C2/payload, not just "it's malicious".
+        iocs: list[str] = []
+        for f in res.findings:
+            iocs.extend(f.data.get("urls", []))
+            iocs.extend(f.data.get("ips", []))
+        iocs = sorted(set(iocs))[:10]
+        detail = ("Recovered stage findings: " + "; ".join(top)) if top \
+            else f"Recovered a {len(data):,}-byte hidden stage."
+        if iocs:
+            detail += " | IOCs: " + ", ".join(iocs)
         yield Finding(
             analyzer=self.name,
             title=f"Hidden payload via {label}: {res.verdict.label}",
             severity=sev,
             category="deobfuscation",
-            detail=("Recovered stage findings: " + "; ".join(top)) if top
-                   else f"Recovered a {len(data):,}-byte hidden stage.",
+            detail=detail,
             data={"recovered_verdict": res.verdict.label,
-                  "recovered_size": len(data)},
+                  "recovered_size": len(data), "recovered_iocs": iocs},
         )
