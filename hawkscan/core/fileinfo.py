@@ -90,12 +90,16 @@ _EXT_TYPE_MAP: dict[str, set[str]] = {
     ".zip": {"zip"},
     ".doc": {"ole"}, ".xls": {"ole"}, ".ppt": {"ole"}, ".msi": {"ole"},
     ".rar": {"rar"}, ".gz": {"gzip"}, ".7z": {"7z"}, ".cab": {"cab"},
+    ".sys": {"pe"}, ".scr": {"pe"}, ".com": {"pe"}, ".cpl": {"pe"}, ".ocx": {"pe"},
     # Documents/images: should NOT be executables. Listing their benign types
     # means a PE/ELF/Mach-O wearing one of these extensions trips ext_mismatch.
     ".jpg": {"image"}, ".jpeg": {"image"}, ".png": {"image"}, ".gif": {"image"},
     ".txt": {"text"}, ".csv": {"text"}, ".log": {"text"}, ".json": {"text"},
     ".rtf": {"text", "ole"}, ".htm": {"text"}, ".html": {"text"},
 }
+
+# Extensions that must be real native executables; any other content masquerades.
+_EXECUTABLE_EXTS = {".exe", ".dll", ".sys", ".scr", ".com", ".cpl", ".ocx", ".so"}
 
 
 def hash_file(path: Path, chunk_size: int = 1 << 20) -> tuple[str, str, str]:
@@ -151,6 +155,16 @@ def detect_type(head: bytes, extension: str) -> tuple[str, str]:
                                (b"\nFrom:" in head or head.startswith(b"From:") or
                                 b"\nReceived:" in head)):
         return "email", "Email message (RFC 822 / EML)"
+    # Content-sniff scripts even without a script extension, so an obfuscated
+    # JS/VBS/PS dropper named e.g. invoice.exe is still routed to the script
+    # analyzer (a very common delivery trick).
+    low = head.lower()
+    stripped = head.lstrip()[:64].lower()
+    if (stripped.startswith((b"var ", b"function", b"(function", b"const ",
+                             b"let ", b"import ", b"<?php", b"@echo", b"#!"))
+            or b"eval(" in low or b"activexobject" in low or b"wscript" in low
+            or b"powershell" in low or b"<script" in low):
+        return "script", "Script (content-detected)"
     if _looks_like_text(head):
         return "text", "Plain text / source"
     return "data", "Unknown binary data"
@@ -184,7 +198,12 @@ def inspect(path: Path) -> FileInfo:
         compatible = _EXT_TYPE_MAP[extension]
         # office-ooxml/apk/jar all originate from zip magic.
         normalized = "zip" if file_type in {"office-ooxml", "apk", "jar"} else file_type
-        if normalized not in compatible and file_type not in {"text", "data"}:
+        if extension in _EXECUTABLE_EXTS:
+            # Executables must be real binaries; ANY other content (script,
+            # text, data) under a .exe/.dll/... is masquerading.
+            if normalized not in compatible:
+                ext_mismatch = True
+        elif normalized not in compatible and file_type not in {"text", "data"}:
             ext_mismatch = True
 
     # Fuzzy hash for similarity clustering (skip very large files).

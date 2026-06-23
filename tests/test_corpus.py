@@ -145,6 +145,18 @@ def test_clean_binary_not_xor_flagged(tmp_path):
                    for f in r.findings)
 
 
+def test_script_dropper_named_exe(tmp_path):
+    # Real-world miss: an obfuscated JS dropper named .exe was typed as opaque
+    # "data" and scored Clean. It must now be typed as a script, flagged as
+    # masquerading, and reach at least Suspicious.
+    body = ("var " + "X" * 14 + "=" + ";".join(f"var a{i}={i}" for i in range(50))
+            + ";eval(unescape('%76'))")
+    r = _scan(tmp_path, "1.exe", body.encode())
+    assert r.info.file_type == "script"
+    assert any(f.category == "masquerading" for f in r.findings)
+    assert r.verdict >= Verdict.SUSPICIOUS
+
+
 def test_masqueraded_executable(tmp_path):
     # A PE wearing a .jpg extension - at least low risk from the mismatch.
     r = _scan(tmp_path, "photo.jpg", b"MZ\x90\x00" + b"\x00" * 200)

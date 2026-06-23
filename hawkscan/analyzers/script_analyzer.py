@@ -139,3 +139,19 @@ class ScriptAnalyzer(Analyzer):
                 category="obfuscation",
                 detail="Minified, high-entropy one-liner; typical of dropper stagers.",
             )
+
+        # Large, high-entropy, low-whitespace body = heavily obfuscated/packed
+        # script (e.g. a multi-megabyte JS dropper with random identifiers).
+        if len(text) > 20000:
+            sample = text[:200_000]
+            ws = sum(c.isspace() for c in sample) / len(sample)
+            if ws < 0.05 and _entropy(sample) > 5.0:
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"Large obfuscated script ({len(text):,} chars, minimal "
+                          "whitespace)",
+                    severity=Severity.MEDIUM,
+                    category="obfuscation",
+                    detail="Large high-entropy body with almost no whitespace; "
+                           "typical of obfuscated/packed script droppers.",
+                )

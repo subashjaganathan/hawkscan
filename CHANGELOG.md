@@ -2,6 +2,21 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.6.1]
+
+### Fixed
+- **Real-world false negative**: an obfuscated JavaScript dropper named `.exe`
+  was misclassified as opaque "data" and scored Clean (the script analyzer never
+  ran). Fixes:
+  - Content-sniff scripts without a script extension (var/function/eval/<?php/
+    WScript/powershell/<script), so script droppers under any extension are
+    routed to the script analyzer.
+  - Any executable extension (.exe/.dll/.scr/.com/...) whose content is not a
+    real native binary is now flagged as masquerading (was excluded for
+    text/data content).
+  - Added a large-obfuscated-script heuristic (big, high-entropy, low-whitespace
+    body) for multi-megabyte JS droppers.
+
 ## [1.6.0]
 
 ### Added
