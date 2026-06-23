@@ -70,7 +70,8 @@ def test_macho_deep_indicators(tmp_path):
             + b" AuthorizationExecuteWithPrivileges login.keychain "
             + b".ssh/authorized_keys spctl --master-disable")
     ctx = _ctx(tmp_path, "m.macho", data)
-    ctx.cache["strings"] = data.decode("latin1").split()
+    # Keep multi-word indicators intact (real extraction preserves spaces).
+    ctx.cache["strings"] = [data.decode("latin1")]
     cats = {f.category for f in MachOAnalyzer().analyze(ctx)}
     assert "privilege" in cats and "credential-access" in cats and "evasion" in cats
 
