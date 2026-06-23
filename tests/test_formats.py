@@ -35,6 +35,18 @@ def test_binprofile_detects_go(tmp_path):
     assert "Go" in labels
 
 
+def test_binprofile_recovers_go_buildinfo(tmp_path):
+    from hawkscan.analyzers.binprofile import BinProfileAnalyzer
+    data = (b"go1.21.3 runtime.goexit \xff Go buildinf:\x08\x00"
+            b"path\tgithub.com/evil/loader\n"
+            b"dep\tgithub.com/pkg/errors\tv0.9.1\th1:xyz\n")
+    ctx = _ctx(tmp_path, "g.elf", data, strings=["go1.21.3", "runtime.goexit"])
+    findings = list(BinProfileAnalyzer().analyze(ctx))
+    bi = [f for f in findings if "Go build info" in f.title]
+    assert bi and bi[0].data["go_module"] == "github.com/evil/loader"
+    assert bi[0].data["go_version"] == "go1.21.3"
+
+
 def test_binprofile_detects_dotnet(tmp_path):
     ctx = _ctx(tmp_path, "n.exe", b"MZ" + b"\x00" * 64,
                strings=["mscoree.dll", "_CorExeMain", "mscorlib"])

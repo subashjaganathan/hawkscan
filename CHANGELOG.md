@@ -2,6 +2,13 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.9.0]
+
+### Added
+- **Go build-info recovery**: for Go-compiled binaries, recovers the Go
+  version, module path and dependency list from the embedded build info
+  (great for attribution). Original parser from the public Go format.
+
 ## [1.8.0]
 
 ### Added (skill-driven: YARA-rule-development + IOC-extraction)

@@ -8,10 +8,15 @@ and some runtimes are themselves a mild signal for commodity malware packers.
 
 from __future__ import annotations
 
+import re
 from typing import Iterable
 
 from .base import Analyzer, AnalysisContext
 from ..core.findings import Finding, Severity
+
+_GO_VERSION = re.compile(rb"go1\.\d{1,2}(?:\.\d{1,2})?")
+# Go module build-info lines are tab-delimited: path/mod/dep/build <value>.
+_GO_BUILDINFO = re.compile(rb"\b(path|mod|dep|build)\t([^\t\n\x00]{1,200})")
 
 # (label, marker tokens, note). Presence of any marker flags the runtime.
 _RUNTIMES: list[tuple[str, tuple[str, ...], str]] = [
@@ -43,8 +48,10 @@ class BinProfileAnalyzer(Analyzer):
         blob = "\n".join(ctx.cache.get("strings") or [])
         if not blob:
             return
+        go_detected = False
         for label, markers, note in _RUNTIMES:
             if any(m in blob for m in markers):
+                go_detected = go_detected or label == "Go"
                 yield Finding(
                     analyzer=self.name,
                     title=f"{label} runtime detected",
@@ -53,3 +60,39 @@ class BinProfileAnalyzer(Analyzer):
                     detail=note,
                     data={"runtime": label},
                 )
+
+        # Deeper Go profiling: recover build metadata (module path, version,
+        # dependencies) from the embedded build-info, useful for attribution.
+        if go_detected or b"Go buildinf:" in ctx.read_all()[:64] or "go1." in blob:
+            yield from self._go_buildinfo(ctx.read_all())
+
+    def _go_buildinfo(self, data: bytes) -> Iterable[Finding]:
+        ver = _GO_VERSION.search(data)
+        version = ver.group().decode("ascii", "ignore") if ver else ""
+        path = ""
+        deps: list[str] = []
+        for m in _GO_BUILDINFO.finditer(data):
+            kind = m.group(1).decode("ascii", "ignore")
+            val = m.group(2).decode("latin1", "ignore").strip()
+            if kind == "path" and not path:
+                path = val
+            elif kind in ("dep", "mod") and val:
+                deps.append(val.split("\t")[0])
+        if not (version or path):
+            return
+        detail = []
+        if version:
+            detail.append(f"version {version}")
+        if path:
+            detail.append(f"module {path}")
+        if deps:
+            detail.append(f"{len(set(deps))} dependenc(y/ies)")
+        yield Finding(
+            analyzer=self.name,
+            title=f"Go build info: {path or version or 'present'}",
+            severity=Severity.INFO,
+            category="attribution",
+            detail="; ".join(detail),
+            data={"go_version": version, "go_module": path,
+                  "go_deps": sorted(set(deps))[:30]},
+        )
