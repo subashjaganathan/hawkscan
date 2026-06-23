@@ -2,6 +2,22 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.6.0]
+
+### Added
+- **Runtime behaviour to MITRE ATT&CK mapping**: dynamic analysis now categorises
+  the API calls it observes into capabilities and ATT&CK techniques (and folds
+  them into the result's ATT&CK map), so behaviour seen only at runtime - e.g.
+  after a packer unpacks in memory - produces the same explainable profile as
+  static analysis, with combination logic (injection triad, etc.).
+- **Expanded Frida hook set**: ~35 high-signal APIs across process/injection/
+  memory, module loading, file, registry/persistence, privilege/credential,
+  network and crypto/anti-analysis (was ~13).
+
+Note: live dynamic execution must be validated in a disposable VM
+(HAWKSCAN_SANDBOX=1 + --detonate); the runtime-to-ATT&CK mapping is unit-tested,
+the hooking itself is exercised in the VM.
+
 ## [1.5.0]
 
 ### Added

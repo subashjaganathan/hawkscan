@@ -59,6 +59,21 @@ def test_tracers_expose_availability():
     assert isinstance(adb_tracer.available(), bool)
 
 
+def test_runtime_apis_map_to_attack():
+    # Captured runtime API calls should categorise into capabilities + ATT&CK,
+    # exactly like static analysis (no execution needed for this mapping).
+    import types
+    from hawkscan.cli import _runtime_attack
+    res = types.SimpleNamespace(mitre={})
+    sb = types.SimpleNamespace(api_calls=["VirtualAllocEx x1",
+                                          "WriteProcessMemory x2",
+                                          "CreateRemoteThread x1"])
+    findings = _runtime_attack(res, sb)
+    assert any("Runtime:" in f.title and "injection" in f.category.lower()
+               for f in findings)
+    assert "T1055" in res.mitre   # process injection folded into the ATT&CK map
+
+
 def test_frida_trace_reports_missing_dependency_cleanly():
     # With frida absent, trace() returns a note rather than raising.
     from hawkscan.dynamic import frida_tracer

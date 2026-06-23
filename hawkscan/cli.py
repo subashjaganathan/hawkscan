@@ -112,10 +112,41 @@ def _run_dynamic(res, path, timeout: int, detonate: bool, method: str) -> None:
             severity=Severity.INFO, category="dynamic",
             detail=f"Did not exit within {timeout}s (long-running/persistent)."))
 
+    # Map observed runtime APIs to capabilities + MITRE ATT&CK, so dynamic
+    # analysis yields the same explainable profile as static (and behaviour seen
+    # only at runtime - e.g. after unpacking - is captured).
+    new.extend(_runtime_attack(res, sb))
+
     res.findings.extend(new)
     res.findings = Engine._dedup(res.findings)
     res.raw_score, res.score = Engine._score(res.findings)
     res.verdict = score_to_verdict(res.score)
+
+
+def _runtime_attack(res, sb) -> "list[Finding]":
+    """Categorise runtime API calls into capabilities/ATT&CK and merge into the
+    result's MITRE map. Frida reports calls as 'Name xN'; take the name."""
+    from .intel import capabilities as cap_intel
+
+    names = {c.split(" x")[0].strip() for c in sb.api_calls}
+    if not names:
+        return []
+    caps, techs = cap_intel.categorize(names)
+    out: list[Finding] = []
+    for hit in cap_intel.detect_combinations(names):
+        tid, tname = hit["mitre"]
+        out.append(Finding(
+            analyzer="dynamic",
+            title=f"Runtime: {hit['name']} ({', '.join(hit['apis'][:4])})",
+            severity={"low": Severity.LOW, "medium": Severity.MEDIUM,
+                      "high": Severity.HIGH, "critical": Severity.CRITICAL}
+                     .get(hit["severity"], Severity.MEDIUM),
+            category=hit["category"],
+            detail=f"Observed at runtime. ATT&CK: {tid} {tname}."))
+    # Fold runtime techniques into the result's ATT&CK map.
+    for tid, info in techs.items():
+        res.mitre.setdefault(tid, info)
+    return out
 
 
 def _run_vt(res) -> None:

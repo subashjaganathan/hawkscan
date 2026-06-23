@@ -23,19 +23,49 @@ except Exception:
 # and post a compact message per call.
 _SCRIPT = r"""
 const TARGETS = [
+  // Process / execution
   ["kernel32.dll", "CreateProcessW", "process"],
+  ["kernel32.dll", "CreateProcessInternalW", "process"],
   ["kernel32.dll", "WinExec", "process"],
+  ["shell32.dll", "ShellExecuteExW", "process"],
+  // Injection / memory
   ["kernel32.dll", "VirtualAllocEx", "injection"],
   ["kernel32.dll", "WriteProcessMemory", "injection"],
   ["kernel32.dll", "CreateRemoteThread", "injection"],
+  ["kernel32.dll", "VirtualProtect", "injection"],
+  ["ntdll.dll", "NtWriteVirtualMemory", "injection"],
+  ["ntdll.dll", "NtCreateThreadEx", "injection"],
+  ["ntdll.dll", "NtUnmapViewOfSection", "injection"],
+  ["ntdll.dll", "NtMapViewOfSection", "injection"],
+  ["ntdll.dll", "QueueUserAPC", "injection"],
+  // Dynamic resolution / modules
   ["kernel32.dll", "LoadLibraryW", "module"],
+  ["kernel32.dll", "GetProcAddress", "module"],
+  ["ntdll.dll", "LdrLoadDll", "module"],
+  // File
   ["kernel32.dll", "WriteFile", "file"],
+  ["kernel32.dll", "CreateFileW", "file"],
+  ["kernel32.dll", "DeleteFileW", "file"],
+  // Registry / persistence
   ["advapi32.dll", "RegSetValueExW", "registry"],
+  ["advapi32.dll", "RegCreateKeyExW", "registry"],
   ["advapi32.dll", "CreateServiceW", "persistence"],
+  ["taskschd.dll", "NewTask", "persistence"],
+  // Privilege / credentials
+  ["advapi32.dll", "AdjustTokenPrivileges", "privilege"],
+  ["advapi32.dll", "OpenProcessToken", "privilege"],
+  ["dbghelp.dll", "MiniDumpWriteDump", "credential"],
+  // Network
   ["wininet.dll", "InternetOpenUrlW", "network"],
+  ["winhttp.dll", "WinHttpConnect", "network"],
   ["ws2_32.dll", "connect", "network"],
+  ["ws2_32.dll", "send", "network"],
   ["urlmon.dll", "URLDownloadToFileW", "network"],
+  // Crypto / anti-analysis
   ["advapi32.dll", "CryptEncrypt", "crypto"],
+  ["bcrypt.dll", "BCryptEncrypt", "crypto"],
+  ["kernel32.dll", "IsDebuggerPresent", "anti-analysis"],
+  ["ntdll.dll", "NtQueryInformationProcess", "anti-analysis"],
 ];
 TARGETS.forEach(function (t) {
   const mod = t[0], fn = t[1], cat = t[2];
