@@ -2,6 +2,16 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.10.0]
+
+### Added
+- **Deeper macOS analysis**: Mach-O analyzer now flags privilege escalation
+  (AuthorizationExecuteWithPrivileges/STPrivilegedTask), credential access
+  (keychain, SSH keys), Gatekeeper/SIP disable, TCC access and dylib injection.
+- **Android family classification**: heuristically labels APK/DEX samples
+  (banking trojan, SMS/OTP stealer, ransomware/locker, RAT/dropper, spyware)
+  from the behaviours detected.
+
 ## [1.9.0]
 
 ### Added

@@ -32,6 +32,13 @@ def test_apk_detection_and_findings(tmp_path):
     assert any("lock the device" in t for t in titles)
 
 
+def test_android_family_classification(tmp_path):
+    apk = _build_apk(tmp_path / "bank.apk")
+    ctx = AnalysisContext(info=fileinfo.inspect(apk), content=apk.read_bytes())
+    titles = [f.title for f in AndroidAnalyzer().analyze(ctx)]
+    assert any("Likely family" in t for t in titles)
+
+
 def test_standalone_dex_detection(tmp_path):
     dex = tmp_path / "classes.dex"
     dex.write_bytes(b"dex\n035\x00" + b"Ljava/lang/Runtime;->exec abortBroadcast")

@@ -64,6 +64,17 @@ def test_onenote_detected_with_embedded_object(tmp_path):
     assert any("OneNote embedded file" in t for t in titles)
 
 
+def test_macho_deep_indicators(tmp_path):
+    from hawkscan.analyzers.macho_analyzer import MachOAnalyzer
+    data = (b"\xcf\xfa\xed\xfe" + b"\x00" * 20
+            + b" AuthorizationExecuteWithPrivileges login.keychain "
+            + b".ssh/authorized_keys spctl --master-disable")
+    ctx = _ctx(tmp_path, "m.macho", data)
+    ctx.cache["strings"] = data.decode("latin1").split()
+    cats = {f.category for f in MachOAnalyzer().analyze(ctx)}
+    assert "privilege" in cats and "credential-access" in cats and "evasion" in cats
+
+
 def test_secrets_and_cloud_detection(tmp_path):
     from hawkscan.analyzers.secrets_analyzer import SecretsAnalyzer
     data = (b"export AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"

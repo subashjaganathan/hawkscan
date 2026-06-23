@@ -65,12 +65,40 @@ class MachOAnalyzer(Analyzer):
                 category="signature",
                 detail="Unsigned Mach-O binaries are blocked by Gatekeeper by default.",
             )
-        for tok, (title, sev) in {
-            "com.apple.quarantine": ("Quarantine-attribute reference", Severity.LOW),
-            "LaunchAgents": ("LaunchAgent persistence reference", Severity.MEDIUM),
-            "LaunchDaemons": ("LaunchDaemon persistence reference", Severity.MEDIUM),
-            "osascript": ("AppleScript execution reference", Severity.LOW),
+        for tok, (title, sev, cat) in {
+            "com.apple.quarantine": ("Quarantine-attribute reference", Severity.LOW, "evasion"),
+            "LaunchAgents": ("LaunchAgent persistence reference", Severity.MEDIUM, "persistence"),
+            "LaunchDaemons": ("LaunchDaemon persistence reference", Severity.MEDIUM, "persistence"),
+            "osascript": ("AppleScript execution reference", Severity.LOW, "execution"),
         }.items():
             if tok in blob:
                 yield Finding(analyzer=self.name, title=title, severity=sev,
-                              category="persistence", detail=f"Contains {tok!r}.")
+                              category=cat, detail=f"Contains {tok!r}.")
+
+        # Deeper macOS behaviour indicators (privilege escalation, credential
+        # and TCC/keychain access, evasion) seen as strings.
+        for tok, (title, sev, cat) in {
+            "AuthorizationExecuteWithPrivileges":
+                ("Privilege escalation API (deprecated AEWP)", Severity.HIGH, "privilege"),
+            "STPrivilegedTask":
+                ("Privileged-task helper (privilege escalation)", Severity.MEDIUM, "privilege"),
+            "authorized_keys":
+                ("SSH authorized_keys access", Severity.HIGH, "credential-access"),
+            "id_rsa":
+                ("SSH private key reference", Severity.MEDIUM, "credential-access"),
+            "login.keychain":
+                ("Keychain access", Severity.MEDIUM, "credential-access"),
+            "security find-generic-password":
+                ("Keychain credential dump (security CLI)", Severity.HIGH, "credential-access"),
+            "spctl --master-disable":
+                ("Gatekeeper disable", Severity.HIGH, "evasion"),
+            "csrutil disable":
+                ("SIP disable attempt", Severity.HIGH, "evasion"),
+            "TCC.db":
+                ("TCC privacy database access", Severity.HIGH, "privacy"),
+            "DYLD_INSERT_LIBRARIES":
+                ("Dylib injection via DYLD_INSERT_LIBRARIES", Severity.MEDIUM, "injection"),
+        }.items():
+            if tok in blob:
+                yield Finding(analyzer=self.name, title=title, severity=sev,
+                              category=cat, detail=f"Contains {tok!r}.")

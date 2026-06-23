@@ -68,36 +68,66 @@ class AndroidAnalyzer(Analyzer):
         return ctx.info.file_type in {"apk", "dex"}
 
     def analyze(self, ctx: AnalysisContext) -> Iterable[Finding]:
+        findings: list[Finding] = []
         if ctx.info.file_type == "dex":
-            yield from self._scan_dex(ctx.read_all())
-            return
+            findings = list(self._scan_dex(ctx.read_all()))
+        else:
+            # APK: pull the manifest and dex streams out of the zip.
+            manifest = b""
+            dex = bytearray()
+            try:
+                with zipfile.ZipFile(ctx.path) as zf:
+                    names = zf.namelist()
+                    if "AndroidManifest.xml" in names:
+                        manifest = zf.read("AndroidManifest.xml")
+                    for n in names:
+                        if n.endswith(".dex"):
+                            dex += zf.read(n)
+            except Exception as exc:
+                yield Finding(analyzer=self.name, title="Unreadable APK structure",
+                              severity=Severity.LOW, category="format", detail=str(exc))
+                return
+            if not manifest and not dex:
+                return
+            findings.append(Finding(
+                analyzer=self.name, title="Android application package",
+                severity=Severity.INFO, category="format",
+                detail=f"{len(names)} entries; "
+                       f"{'manifest found' if manifest else 'no manifest'}."))
+            if manifest:
+                findings.extend(self._scan_permissions(manifest))
+            if dex:
+                findings.extend(self._scan_dex(bytes(dex)))
 
-        # APK: pull the manifest and dex streams out of the zip.
-        manifest = b""
-        dex = bytearray()
-        try:
-            with zipfile.ZipFile(ctx.path) as zf:
-                names = zf.namelist()
-                if "AndroidManifest.xml" in names:
-                    manifest = zf.read("AndroidManifest.xml")
-                for n in names:
-                    if n.endswith(".dex"):
-                        dex += zf.read(n)
-        except Exception as exc:
-            yield Finding(analyzer=self.name, title="Unreadable APK structure",
-                          severity=Severity.LOW, category="format", detail=str(exc))
-            return
+        yield from findings
+        family = self._classify(findings)
+        if family:
+            yield family
 
-        if not manifest and not dex:
-            return
-        yield Finding(analyzer=self.name, title="Android application package",
-                      severity=Severity.INFO, category="format",
-                      detail=f"{len(names)} entries; {'manifest found' if manifest else 'no manifest'}.")
-
-        if manifest:
-            yield from self._scan_permissions(manifest)
-        if dex:
-            yield from self._scan_dex(bytes(dex))
+    @staticmethod
+    def _classify(findings: list[Finding]) -> Finding | None:
+        """Heuristically classify the Android sample into a malware family type
+        from the behaviour categories detected (original generic rules)."""
+        cats = {f.category for f in findings}
+        titles = " ".join(f.title.lower() for f in findings)
+        family = None
+        if "accessibility" in cats and ("overlay" in cats or "sms-intercept" in cats):
+            family = "Banking trojan (overlay + accessibility abuse)"
+        elif {"sms-fraud", "sms-intercept"} & cats and "device-id" in cats:
+            family = "SMS trojan / OTP stealer"
+        elif "device-admin" in cats and ("lock" in titles or "ransom" in titles
+                                         or "resetpassword" in titles):
+            family = "Android ransomware / locker"
+        elif "dynamic-code" in cats and ("execution" in cats or "discovery" in cats):
+            family = "RAT / dropper (dynamic code loading)"
+        elif "accessibility" in cats or "device-id" in cats:
+            family = "Spyware / stalkerware"
+        if not family:
+            return None
+        return Finding(
+            analyzer="android", title=f"Likely family: {family}",
+            severity=Severity.HIGH, category="classification",
+            detail="Heuristic classification from observed behaviours.")
 
     def _scan_permissions(self, manifest: bytes) -> Iterable[Finding]:
         strings, _ = extract_strings(manifest, min_len=6)
