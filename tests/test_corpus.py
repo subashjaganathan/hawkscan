@@ -126,6 +126,25 @@ def test_archive_member_rescanned(tmp_path):
     assert any("Archived member" in x.title for x in res.findings)
 
 
+def test_xor_encoded_payload_recovered(tmp_path):
+    # A carrier hiding a single-byte-XOR-encoded PE (DOS-stub marker + injection
+    # API strings) must be recovered, re-scanned, and flagged.
+    pe = (b"MZ\x90\x00" + b"\x00" * 58 + b"This program cannot be run in DOS mode"
+          + b" VirtualAllocEx WriteProcessMemory CreateRemoteThread "
+            b"SetThreadContext NtUnmapViewOfSection")
+    xored = bytes(b ^ 0x37 for b in pe)
+    r = _scan(tmp_path, "drop.bin", b"harmless header\n" + xored)
+    assert any(f.analyzer == "deobfuscate" and "XOR" in f.title for f in r.findings)
+    assert r.verdict >= Verdict.SUSPICIOUS
+
+
+def test_clean_binary_not_xor_flagged(tmp_path):
+    # A normal file with no XOR-encoded marker must not trigger XOR recovery.
+    r = _scan(tmp_path, "plain.bin", b"\x00\x01\x02\x03" * 200 + b"ordinary data")
+    assert not any(f.analyzer == "deobfuscate" and "XOR" in f.title
+                   for f in r.findings)
+
+
 def test_masqueraded_executable(tmp_path):
     # A PE wearing a .jpg extension - at least low risk from the mismatch.
     r = _scan(tmp_path, "photo.jpg", b"MZ\x90\x00" + b"\x00" * 200)

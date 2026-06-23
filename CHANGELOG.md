@@ -2,6 +2,15 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.5.0]
+
+### Added
+- **XOR / multi-layer deobfuscation**: brute single-byte XOR keys against known
+  plaintext markers (DOS stub, powershell, http, CreateProcess) and re-scan the
+  decoded payload, catching XOR-encoded PEs/scripts hidden in any carrier.
+  Also runs on base64-decoded blobs (multi-layer). Cost-bounded and false-
+  positive-safe (only fires on a marker hit for a non-zero key).
+
 ## [1.4.1]
 
 ### Fixed

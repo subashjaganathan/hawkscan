@@ -27,6 +27,18 @@ from ..core.findings import Finding, Severity, Verdict
 _B64 = re.compile(rb"[A-Za-z0-9+/]{40,}={0,2}")
 _HEX = re.compile(rb"(?:[0-9A-Fa-f]{2}){40,}")
 _MAX_PAYLOADS = 3
+_XOR_MAX_SIZE = 16 * 1024 * 1024  # cap XOR brute to bound cost
+
+# High-confidence plaintext markers to brute single-byte XOR against. A match on
+# any of these for key K>0 means the carrier hides XOR-encoded content.
+_XOR_MARKERS: list[tuple[bytes, str]] = [
+    (b"This program cannot be run in DOS mode", "PE"),
+    (b"powershell", "script"),
+    (b"cmd.exe /c", "script"),
+    (b"CreateProcess", "api"),
+    (b"http://", "url"),
+    (b"InvokeExpression", "script"),
+]
 _VERDICT_SEV = {
     Verdict.MALICIOUS: Severity.CRITICAL,
     Verdict.LIKELY_MALICIOUS: Severity.HIGH,
@@ -40,9 +52,10 @@ class DeobAnalyzer(Analyzer):
     def applies(self, ctx: AnalysisContext) -> bool:
         if ctx.cache.get("_no_deob"):
             return False  # we are already inside a recovered-payload scan
-        return ctx.info.file_type in {"pe", "script", "text"}
+        return ctx.info.file_type in {"pe", "script", "text", "data"}
 
     def analyze(self, ctx: AnalysisContext) -> Iterable[Finding]:
+        data = ctx.read_all()
         recovered: list[tuple[str, bytes]] = []
 
         if ctx.info.file_type == "pe":
@@ -51,10 +64,23 @@ class DeobAnalyzer(Analyzer):
                 recovered.append(("UPX unpack", up))
 
         if ctx.info.file_type in {"script", "text"}:
-            recovered.extend(self._decode_blobs(ctx.read_all()))
+            blobs = self._decode_blobs(data)
+            recovered.extend(blobs)
+            # Multi-layer: a decoded blob may itself be XOR-encoded.
+            for _, dec in blobs[:_MAX_PAYLOADS]:
+                recovered.extend(self._xor_recover(dec, layer="base64+"))
 
-        for label, data in recovered[:_MAX_PAYLOADS]:
-            yield from self._rescan(label, data)
+        # Single-byte XOR recovery on the raw file (catches XOR-encoded payloads
+        # in any binary/data carrier, e.g. a dropper hiding an XOR'd PE).
+        recovered.extend(self._xor_recover(data))
+
+        seen: set[bytes] = set()
+        for label, payload in recovered[:_MAX_PAYLOADS]:
+            key = payload[:64]
+            if key in seen:
+                continue
+            seen.add(key)
+            yield from self._rescan(label, payload)
 
     # ---- recovery -------------------------------------------------------
     def _upx_unpack(self, ctx: AnalysisContext) -> bytes | None:
@@ -104,6 +130,24 @@ class DeobAnalyzer(Analyzer):
             if len(out) >= _MAX_PAYLOADS:
                 break
         return out
+
+    @staticmethod
+    def _xor_recover(data: bytes, layer: str = "") -> list[tuple[str, bytes]]:
+        """Brute single-byte XOR keys (1-255). If a known plaintext marker
+        appears XOR'd with key K, decode the whole buffer with K and return it.
+        Cheap: only small marker searches run until a hit; full XOR happens once.
+        """
+        if not (64 <= len(data) <= _XOR_MAX_SIZE):
+            return []
+        for k in range(1, 256):
+            for marker, kind in _XOR_MARKERS:
+                if bytes(c ^ k for c in marker) in data:
+                    dec = bytes(b ^ k for b in data)
+                    if kind == "PE":
+                        mz = dec.find(b"MZ")
+                        dec = dec[mz:] if mz != -1 else dec
+                    return [(f"{layer}single-byte XOR 0x{k:02x}", dec)]
+        return []
 
     @staticmethod
     def _meaningful(dec: bytes) -> bool:
