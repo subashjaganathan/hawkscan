@@ -18,6 +18,9 @@ _UTF16_RE = re.compile(rb"(?:[\x20-\x7e]\x00){4,}")
 
 _URL_RE = re.compile(r"\b(?:https?|ftp)://[^\s\"'<>]{4,}", re.I)
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+_MUTEX_RE = re.compile(r"(?:Global|Local)\\[A-Za-z0-9_\-.{}]{4,40}")
+_UA_RE = re.compile(r"Mozilla/[45]\.0[^\r\n\"'<>]{5,200}")
+_PDB_RE = re.compile(r"[A-Za-z]:\\[^\s\"'<>|]{3,200}\.pdb", re.I)
 
 # Benign domains that appear in legitimate binaries/documents (schemas, OS
 # telemetry, certificate/OCSP endpoints, CDNs). URLs on these are filtered out
@@ -149,3 +152,21 @@ class StringsAnalyzer(Analyzer):
                 detail="; ".join(ips[:10]),
                 data={"ips": ips},
             )
+
+        # Additional IOCs (mutex/UA = behaviour, PDB path = attribution).
+        mutexes = sorted(set(_MUTEX_RE.findall(blob)))[:15]
+        if mutexes:
+            yield Finding(analyzer=self.name, title=f"{len(mutexes)} mutex name(s)",
+                          severity=Severity.INFO, category="ioc",
+                          detail="; ".join(mutexes[:8]), data={"mutexes": mutexes})
+        uas = sorted(set(_UA_RE.findall(blob)))[:10]
+        if uas:
+            yield Finding(analyzer=self.name, title=f"{len(uas)} User-Agent string(s)",
+                          severity=Severity.INFO, category="ioc",
+                          detail="; ".join(u[:60] for u in uas[:5]),
+                          data={"user_agents": uas})
+        pdbs = sorted(set(_PDB_RE.findall(blob)))[:5]
+        if pdbs:
+            yield Finding(analyzer=self.name, title="PDB path(s) present",
+                          severity=Severity.INFO, category="attribution",
+                          detail="; ".join(pdbs), data={"pdb_paths": pdbs})

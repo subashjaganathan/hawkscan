@@ -2,6 +2,17 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.8.0]
+
+### Added (skill-driven: YARA-rule-development + IOC-extraction)
+- **More IOC extraction**: mutex names, User-Agent strings, and PDB paths
+  (attribution) are now pulled from samples alongside URLs/IPs.
+- **STIX 2.1 export** (`--stix FILE`): writes File + Indicator objects (file
+  hash, URLs, IPs, recovered C2) for sharing into a TIP/SIEM. Stdlib only.
+- **YARA rule-authoring assistant** (`tools/yara_assist.py`): generates a draft
+  rule (candidate strings/imports/hex, metadata, filesize guard) from a sample,
+  per the rule-development methodology.
+
 ## [1.7.0]
 
 ### Added

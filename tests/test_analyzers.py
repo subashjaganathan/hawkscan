@@ -65,6 +65,17 @@ def test_lone_api_name_not_flagged_as_injection(tmp_path):
     assert not any("Process-injection API reference" in t for t in titles)
 
 
+def test_strings_extracts_mutex_pdb_ua(tmp_path):
+    data = (b"uses Global\\EvilMutex123 ; UA Mozilla/5.0 (Windows NT 10.0) Evil/1.0 ;"
+            b" pdb C:\\Users\\dev\\Release\\stealer.pdb")
+    ctx = _ctx(tmp_path, "s.bin", data)
+    cats = {(f.category, f.title) for f in StringsAnalyzer().analyze(ctx)}
+    titles = [t for _, t in cats]
+    assert any("mutex" in t for t in titles)
+    assert any("User-Agent" in t for t in titles)
+    assert any("PDB" in t for t in titles)
+
+
 def test_strings_extracts_urls(tmp_path):
     data = b"connect to http://evil.example.com/payload and http://c2.example.net"
     ctx = _ctx(tmp_path, "s.bin", data)

@@ -199,6 +199,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Emit JSON instead of a text report.")
     p.add_argument("--html", metavar="FILE",
                    help="Write a self-contained HTML report to FILE.")
+    p.add_argument("--stix", metavar="FILE",
+                   help="Write extracted IOCs as a STIX 2.1 bundle to FILE.")
     p.add_argument("--rules", metavar="DIR",
                    help="Directory of additional YARA (.yar) rules.")
     p.add_argument("--hashscan", action="store_true",
@@ -373,6 +375,14 @@ def main(argv: list[str] | None = None) -> int:
             report_html.render_html(reported), encoding="utf-8"
         )
         print(f"HTML report written to {args.html}")
+
+    if args.stix:
+        import json as _json
+        from . import stix
+        bundle = stix.build_bundle(results)
+        Path(args.stix).write_text(_json.dumps(bundle, indent=2), encoding="utf-8")
+        print(f"STIX 2.1 bundle ({len(bundle['objects'])} objects) written to "
+              f"{args.stix}")
 
     if args.json:
         import json as _json
