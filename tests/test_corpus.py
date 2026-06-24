@@ -268,3 +268,19 @@ def test_archive_lone_exe_and_zipslip(tmp_path):
     titles2 = [f.title for f in ArchiveAnalyzer().analyze(ctx2)]
     assert any("Zip Slip" in t for t in titles2)
     assert any("bidi" in t.lower() or "Bidirectional" in t for t in titles2)
+
+
+def test_carver_macho_and_ole_signatures(tmp_path):
+    import struct
+    from hawkscan.analyzers.carver import Carver
+    from hawkscan.analyzers.base import AnalysisContext
+    from hawkscan.core import fileinfo
+    macho = (b"\xcf\xfa\xed\xfe" + struct.pack("<iiIIIII", 0x01000007, 0, 2, 3, 0, 0, 0)
+             + b"\x00" * 64)
+    ole = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 128
+    f = tmp_path / "x.pdf"
+    f.write_bytes(b"%PDF-1.5\n" + b"A" * 200 + macho + b"B" * 100 + ole + b"\n%%EOF")
+    ctx = AnalysisContext(info=fileinfo.inspect(f), content=f.read_bytes())
+    titles = [t.title for t in Carver().analyze(ctx)]
+    assert any("Mach-O executable" in t for t in titles)
+    assert any("OLE/MSI compound file" in t for t in titles)

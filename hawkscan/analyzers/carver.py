@@ -44,6 +44,22 @@ def _validate_elf(data: bytes, off: int) -> bool:
             and data[off + 4] in (1, 2) and data[off + 5] in (1, 2))
 
 
+_MACHO_MAGICS = {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe",
+                 b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"}
+
+
+def _validate_macho(data: bytes, off: int) -> bool:
+    # Confirm a sane Mach-O filetype so the 4-byte magic does not false-hit.
+    if data[off:off + 4] not in _MACHO_MAGICS or off + 16 > len(data):
+        return False
+    big = data[off:off + 4] in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf")
+    try:
+        ft = struct.unpack_from(">I" if big else "<I", data, off + 12)[0]
+    except struct.error:
+        return False
+    return ft in (1, 2, 3, 6, 8, 9, 10, 11)
+
+
 def _pe_size(data: bytes, off: int) -> int | None:
     """Compute an embedded PE's on-disk size from its section table, so carving
     captures the whole payload rather than stopping at a coincidental inner
@@ -69,17 +85,27 @@ def _pe_size(data: bytes, off: int) -> int | None:
 _SIGNATURES = [
     ("PE executable", b"MZ", _validate_pe),
     ("ELF executable", b"\x7fELF", _validate_elf),
+    ("Mach-O executable", b"\xcf\xfa\xed\xfe", _validate_macho),
+    ("Mach-O executable", b"\xce\xfa\xed\xfe", _validate_macho),
+    ("Mach-O executable", b"\xfe\xed\xfa\xcf", _validate_macho),
+    ("Android DEX", b"dex\n035\x00", None),
     ("ZIP archive", b"PK\x03\x04", None),
     ("PDF document", b"%PDF-", None),
     ("RAR archive", b"Rar!\x1a\x07", None),
     ("GZIP stream", b"\x1f\x8b\x08", None),
     ("7-Zip archive", b"7z\xbc\xaf\x27\x1c", None),
+    ("XZ stream", b"\xfd7zXZ\x00", None),
+    ("CAB archive", b"MSCF\x00\x00\x00\x00", None),
+    ("OLE/MSI compound file", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", None),
+    ("CHM help file", b"ITSF\x03\x00\x00\x00", None),
 ]
 
 _EXT_FOR = {
-    "PE executable": "bin", "ELF executable": "elf", "ZIP archive": "zip",
+    "PE executable": "bin", "ELF executable": "elf",
+    "Mach-O executable": "macho", "Android DEX": "dex", "ZIP archive": "zip",
     "PDF document": "pdf", "RAR archive": "rar", "GZIP stream": "gz",
-    "7-Zip archive": "7z",
+    "7-Zip archive": "7z", "XZ stream": "xz", "CAB archive": "cab",
+    "OLE/MSI compound file": "ole", "CHM help file": "chm",
 }
 
 _MAX_REPORTED = 50

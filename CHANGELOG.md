@@ -2,6 +2,15 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.27.0]
+
+### Added
+- **Carver signature coverage** (module improvement pass 16): embedded
+  Mach-O (validated by filetype), Android DEX, OLE/MSI compound files, CAB,
+  XZ and CHM payloads are now carved/flagged in addition to PE/ELF/ZIP/PDF/
+  RAR/GZIP/7z. Specific multi-byte magics keep false positives at zero on
+  clean images.
+
 ## [1.26.0]
 
 ### Fixed
