@@ -306,3 +306,24 @@ def test_office_clean_hyperlink_no_fp(tmp_path):
                                     "word/_rels/document.xml.rels": rels})
     titles = [t.title for t in OfficeAnalyzer().analyze(_ctx(tmp_path, "d.docx", f.read_bytes()))]
     assert not any("template injection" in t.lower() or "External" in t for t in titles)
+
+
+def test_elf_structural_traits(tmp_path):
+    import struct
+    from hawkscan.analyzers.elf_analyzer import ELFAnalyzer
+    # 64-bit ELF exec with one RWX PT_LOAD segment and no section headers.
+    e_ident = b"\x7fELF" + bytes([2, 1, 1]) + b"\x00" * 9
+    phoff, phentsize, phnum = 64, 56, 1
+    hdr = e_ident + struct.pack("<HHI", 2, 0x3e, 1)
+    hdr += struct.pack("<QQQ", 0, phoff, 0)            # entry, phoff, shoff=0
+    hdr += struct.pack("<IHHHHHH", 0, 64, phentsize, phnum, 64, 0, 0)  # shnum=0
+    ph = struct.pack("<II", 1, 0x7) + b"\x00" * 48      # PT_LOAD, RWX
+    data = hdr + ph
+    ctx = _ctx(tmp_path, "x.elf", data)
+    if ctx.info.file_type != "elf":
+        import pytest
+        pytest.skip("synthetic ELF not recognised")
+    ctx.cache["strings"] = []
+    titles = [f.title for f in ELFAnalyzer().analyze(ctx)]
+    assert any("RWX" in t for t in titles)
+    assert any("Section headers absent" in t for t in titles)

@@ -2,6 +2,16 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.14.0]
+
+### Added
+- **ELF analyzer depth** (module improvement pass 3): real program- and
+  section-header parsing (stdlib). Detects RWX (self-modifying) LOAD
+  segments, executable stack (NX disabled), absent section headers (UPX/
+  packer hallmark), statically linked executables, stripped binaries, and an
+  unusual dynamic-linker/interpreter path. Added UPX! artifact, systemd and
+  SSH authorized_keys persistence/credential string heuristics.
+
 ## [1.13.0]
 
 ### Added
