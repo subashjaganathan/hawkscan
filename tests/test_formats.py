@@ -210,3 +210,48 @@ def test_email_phishing_indicators(tmp_path):
     assert any("SPF" in t for t in titles)
     assert any("Double-extension" in t for t in titles)
     assert any("Return-Path" in t for t in titles)
+
+
+def _system_pe():
+    """Return a path to a real PE on this host, or None (e.g. on Linux CI)."""
+    import glob
+    import os
+    for p in (r"C:\Windows\System32\where.exe",
+              r"C:\Windows\System32\notepad.exe"):
+        if os.path.exists(p):
+            return p
+    hits = glob.glob(r"C:\Windows\System32\*.exe")
+    return hits[0] if hits else None
+
+
+def test_pe_header_anomalies_on_mutated_binary(tmp_path):
+    """Mutating a real PE (zero timestamp, rename a section, break the checksum)
+    must light up the new header/section anomaly findings, while a clean PE stays
+    quiet. Skips where pefile or a host PE is unavailable (Linux CI)."""
+    import pytest
+    pefile = pytest.importorskip("pefile")
+    src = _system_pe()
+    if not src:
+        pytest.skip("no system PE available on this host")
+    from hawkscan.core import fileinfo
+    from hawkscan.analyzers.base import AnalysisContext
+    from hawkscan.analyzers.pe_analyzer import PEAnalyzer
+
+    pe = pefile.PE(src)
+    pe.FILE_HEADER.TimeDateStamp = 0
+    pe.OPTIONAL_HEADER.CheckSum = 0x11111111
+    pe.sections[0].Name = b".packed\x00"
+    out = tmp_path / "m.exe"
+    pe.write(str(out))
+
+    ctx = AnalysisContext(info=fileinfo.inspect(out), content=out.read_bytes())
+    titles = [t.title for t in PEAnalyzer().analyze(ctx)]
+    assert any("Zeroed compile timestamp" in t for t in titles)
+    assert any("Non-standard section name" in t for t in titles)
+    assert any("PE checksum invalid" in t for t in titles)
+
+    # The unmodified original must not raise any of these anomalies.
+    cln = AnalysisContext(info=fileinfo.inspect(src), content=open(src, "rb").read())
+    clean_titles = [t.title for t in PEAnalyzer().analyze(cln)]
+    assert not any("Zeroed compile timestamp" in t for t in clean_titles)
+    assert not any("Future/forged compile timestamp" in t for t in clean_titles)

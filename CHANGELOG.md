@@ -2,6 +2,18 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.12.0]
+
+### Added
+- **PE analyzer depth** (module improvement pass 1): rich-header hash
+  (richhash) for sample clustering; entry-point anomaly checks (zero EP, EP
+  outside all sections, EP in a writable or final section); PE checksum
+  validation; compile-timestamp sanity (zeroed / future-forged, REPRO-aware);
+  non-standard section-name detection; dynamic-API-resolution-only import
+  detection; manifest requestedExecutionLevel (elevation intent); debug PDB
+  path extraction (attribution IOC); and high-entropy resource detection
+  (media-magic aware to avoid icon/image false positives).
+
 ## [1.11.0]
 
 ### Added

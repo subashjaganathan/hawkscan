@@ -7,8 +7,11 @@ something useful without the dependency.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import struct
+import time
+from datetime import datetime, timezone
 from typing import Iterable
 
 from .base import Analyzer, AnalysisContext
@@ -25,6 +28,36 @@ _KNOWN_PACKER_SECTIONS = {
     b"UPX0", b"UPX1", b"UPX2", b".aspack", b".adata", b"ASPack",
     b".nsp0", b".nsp1", b"FSG!", b".petite", b".themida", b"pebundle",
 }
+
+# Section names produced by mainstream toolchains (MSVC, MinGW, Go, Rust, etc.).
+# Anything outside this set (and not a known packer) is worth noting.
+_STANDARD_SECTIONS = {
+    ".text", ".data", ".rdata", ".bss", ".idata", ".edata", ".rsrc",
+    ".reloc", ".tls", ".pdata", ".xdata", ".debug", ".didat", ".gfids",
+    ".00cfg", ".voltbl", ".sxdata", ".rodata", ".init", ".fini",
+    "code", "data", ".code", ".crt", ".gnu_deb", ".symtab", ".strtab",
+    ".note", ".comment", ".eh_fram", ".CRT", ".INIT",
+    # Recent MSVC / Windows hotpatch & CFG sections (present on clean binaries).
+    "fothk", ".fothk", "_RDATA", ".gxfg", ".retplne", ".giats", ".gehcont",
+    ".gfids", ".wixburn", ".detourc", ".detourd",
+}
+# APIs whose presence as nearly the *only* imports indicates the binary resolves
+# the rest of its API surface at runtime (a packer / API-hiding trait).
+_RESOLVER_APIS = {"LoadLibraryA", "LoadLibraryW", "LoadLibraryExA",
+                  "LoadLibraryExW", "GetProcAddress", "GetModuleHandleA",
+                  "GetModuleHandleW"}
+
+# Magic prefixes of media/compressed formats that are *legitimately* high
+# entropy, so a high-entropy resource with one of these is not a payload signal.
+_MEDIA_MAGICS = (
+    b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"BM", b"RIFF", b"OggS",
+    b"ID3", b"\x1f\x8b", b"\x00\x00\x01\x00", b"\x00\x00\x02\x00",  # ICO/CUR
+    b"\x00\x00\x00\x18ftyp", b"\x00\x00\x00\x20ftyp", b"DDS ", b"\x49\x49\x2a\x00",
+)
+
+
+def _is_media(header: bytes) -> bool:
+    return any(header.startswith(m) for m in _MEDIA_MAGICS)
 
 
 class PEAnalyzer(Analyzer):
@@ -59,6 +92,7 @@ class PEAnalyzer(Analyzer):
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"],
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_TLS"],
             pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXPORT"],
+            pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_DEBUG"],
         ])
 
         # imphash (import-table fingerprint) + rich header hash: both are
@@ -76,10 +110,23 @@ class PEAnalyzer(Analyzer):
         except Exception:
             rich = None
         if rich and rich.get("checksum") is not None:
-            yield Finding(analyzer=self.name,
-                          title=f"Rich header present (xor key 0x{rich['checksum']:x})",
-                          severity=Severity.INFO, category="identity",
-                          detail="Compiler/toolchain fingerprint.")
+            # Rich-header hash: MD5 of the xor-cleared @comp.id records. Like
+            # imphash, it clusters samples built on the same dev toolchain.
+            rich_hash = ""
+            try:
+                clear = rich.get("clear_data") or b""
+                if clear:
+                    rich_hash = hashlib.md5(clear).hexdigest()
+            except Exception:
+                rich_hash = ""
+            yield Finding(
+                analyzer=self.name,
+                title=(f"Rich header present (richhash {rich_hash})" if rich_hash
+                       else f"Rich header present (xor key 0x{rich['checksum']:x})"),
+                severity=Severity.INFO, category="identity",
+                detail="Compiler/toolchain fingerprint; richhash clusters sibling "
+                       "samples from the same build environment.",
+                data={"richhash": rich_hash} if rich_hash else None)
 
         # TLS callbacks run before the entry point - a common early-execution /
         # anti-analysis technique.
@@ -103,13 +150,24 @@ class PEAnalyzer(Analyzer):
             data={"timestamp": pe.FILE_HEADER.TimeDateStamp},
         )
 
+        # Reproducible-build binaries (notably modern Microsoft ones) store a
+        # content hash in TimeDateStamp, flagged by a REPRO debug entry. Detect
+        # it so the timestamp-sanity check does not false-positive on them.
+        is_repro = any(getattr(d.struct, "Type", None) == 16
+                       for d in getattr(pe, "DIRECTORY_ENTRY_DEBUG", []) or [])
+        yield from self._header_anomalies(pe, is_dll, is_repro)
+
         # Section names + per-section entropy.
         packer_hit = False
         wx_sections = []
+        nonstd_sections: list[str] = []
         for section in pe.sections:
             raw_name = section.Name.rstrip(b"\x00")
+            name_s = raw_name.decode("latin1", "ignore")
             if raw_name in _KNOWN_PACKER_SECTIONS:
                 packer_hit = True
+            elif name_s and name_s not in _STANDARD_SECTIONS:
+                nonstd_sections.append(name_s or "(unnamed)")
             # Writable + executable section = self-modifying / unpacking stub.
             ch = section.Characteristics
             if (ch & 0x20000000) and (ch & 0x80000000):  # EXECUTE + WRITE
@@ -150,6 +208,16 @@ class PEAnalyzer(Analyzer):
                 category="packer",
                 detail="Section names match a known packer (UPX/ASPack/Themida/etc.).",
             )
+        # Non-standard section names (not a recognised toolchain/packer name).
+        # LOW on its own: legitimate binaries occasionally use custom sections.
+        if nonstd_sections:
+            yield Finding(
+                analyzer=self.name,
+                title=f"Non-standard section name(s): {', '.join(nonstd_sections[:6])}",
+                severity=Severity.LOW, category="packer",
+                detail="Section names outside the common toolchain set; seen in "
+                       "packed, custom-linked, or hand-crafted binaries.",
+                data={"sections": nonstd_sections[:16]})
 
         # Collect the full import table for the CapabilityAnalyzer, which owns
         # API-to-capability/ATT&CK scoring (so we don't double-count here).
@@ -165,6 +233,18 @@ class PEAnalyzer(Analyzer):
                             api_addrs[n] = f"0x{imp.address:x}"
             ctx.cache["api_names"] = api_names
             ctx.cache["api_addrs"] = api_addrs
+            # A tiny import table consisting mostly of LoadLibrary/GetProcAddress
+            # means the real API surface is resolved at runtime - an API-hiding /
+            # unpacking trait rather than a normally-linked program.
+            if 0 < len(api_names) <= 12 and (api_names & _RESOLVER_APIS) and \
+                    len(api_names - _RESOLVER_APIS) <= 4:
+                yield Finding(
+                    analyzer=self.name,
+                    title="Imports limited to dynamic API resolution",
+                    severity=Severity.MEDIUM, category="packer",
+                    detail="The import table is dominated by LoadLibrary/"
+                           "GetProcAddress; the binary resolves its real APIs at "
+                           "runtime to hide capability from static tools.")
         else:
             yield Finding(
                 analyzer=self.name,
@@ -282,20 +362,37 @@ class PEAnalyzer(Analyzer):
                            "disk; the binary may have been renamed.",
                 )
 
-        # Resource directory: count entries and look for embedded executables.
+        # Manifest execution level + debug PDB path.
+        yield from self._manifest_and_debug(pe, ctx.read_all())
+
+        # Resource directory: count entries, look for embedded executables, and
+        # flag a large high-entropy resource (encrypted/compressed payload).
         if hasattr(pe, "DIRECTORY_ENTRY_RESOURCE"):
             rtypes, entries, embedded = 0, 0, False
+            best_ent, best_size = 0.0, 0
             for rtype in pe.DIRECTORY_ENTRY_RESOURCE.entries:
                 rtypes += 1
                 for rid in getattr(getattr(rtype, "directory", None), "entries", []):
                     for lang in getattr(getattr(rid, "directory", None), "entries", []):
                         entries += 1
                         try:
-                            blob = pe.get_data(lang.data.struct.OffsetToData, 4)
+                            off = lang.data.struct.OffsetToData
+                            size = lang.data.struct.Size
+                            blob = pe.get_data(off, min(size, 16))
                         except Exception:
                             continue
                         if blob[:2] == b"MZ" or blob[:4] == b"\x7fELF":
                             embedded = True
+                        # Skip naturally high-entropy media (icons/images/audio/
+                        # video/compressed); only raw encrypted blobs are notable.
+                        if size > 4096 and not _is_media(blob):
+                            try:
+                                full = pe.get_data(off, min(size, 1 << 20))
+                                ent = shannon_entropy(full)
+                                if ent > best_ent:
+                                    best_ent, best_size = ent, size
+                            except Exception:
+                                pass
             yield Finding(analyzer=self.name,
                           title=f"{entries} resource(s) in {rtypes} type(s)",
                           severity=Severity.INFO, category="metadata")
@@ -307,6 +404,16 @@ class PEAnalyzer(Analyzer):
                     detail="A resource entry begins with an executable header; "
                            "the binary carries an embedded payload.",
                 )
+            elif best_ent >= 7.2 and best_size > 4096:
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"High-entropy resource ({best_size:,} bytes, "
+                          f"entropy {best_ent:.2f})",
+                    severity=Severity.LOW, category="dropper",
+                    detail="A resource is high-entropy without a known header; "
+                           "often an encrypted or compressed embedded payload.",
+                    data={"resource_entropy": round(best_ent, 3),
+                          "resource_size": best_size})
 
     # Generic export names that, when they dominate a small export table, are
     # typical of beacon/loader DLLs rather than legitimate libraries.
@@ -362,6 +469,129 @@ class PEAnalyzer(Analyzer):
                 analyzer=self.name, title="All exports are forwarders",
                 severity=Severity.MEDIUM, category="exports",
                 detail="Fully-forwarding DLL; can indicate DLL proxying/hijacking.")
+
+    def _header_anomalies(self, pe, is_dll: bool, is_repro: bool = False) -> Iterable[Finding]:
+        """Entry-point placement, PE checksum and compile-timestamp sanity."""
+        # --- entry point ---
+        ep = pe.OPTIONAL_HEADER.AddressOfEntryPoint
+        if ep == 0 and not is_dll:
+            yield Finding(
+                analyzer=self.name, title="Entry point is zero",
+                severity=Severity.MEDIUM, category="anti-analysis",
+                detail="An executable with AddressOfEntryPoint=0 is abnormal; seen "
+                       "in corrupted or manually-mapped/injected images.")
+        elif ep:
+            sec = None
+            try:
+                sec = pe.get_section_by_rva(ep)
+            except Exception:
+                sec = None
+            if sec is None:
+                yield Finding(
+                    analyzer=self.name,
+                    title="Entry point outside all sections",
+                    severity=Severity.HIGH, category="anti-analysis",
+                    detail="AddressOfEntryPoint does not map into any section; "
+                           "typical of malformed or packed/injected binaries.")
+            else:
+                ch = sec.Characteristics
+                ep_name = sec.Name.rstrip(b'\x00').decode('latin1', 'ignore')
+                if ch & 0x80000000:  # writable
+                    yield Finding(
+                        analyzer=self.name,
+                        title=f"Entry point in writable section {ep_name!r}",
+                        severity=Severity.MEDIUM, category="packer",
+                        detail="Execution starts in a writable section; the code "
+                               "rewrites itself (self-modifying / unpacking stub).")
+                if pe.sections and sec is pe.sections[-1] and len(pe.sections) > 1 \
+                        and not (ch & 0x80000000):
+                    yield Finding(
+                        analyzer=self.name,
+                        title=f"Entry point in last section {ep_name!r}",
+                        severity=Severity.LOW, category="packer",
+                        detail="Compilers place the entry point in an early code "
+                               "section; an EP in the final section suggests a "
+                               "packer stub.")
+
+        # --- checksum ---
+        stored = pe.OPTIONAL_HEADER.CheckSum
+        try:
+            computed = pe.generate_checksum()
+        except Exception:
+            computed = stored
+        if stored and computed and stored != computed:
+            yield Finding(
+                analyzer=self.name,
+                title="PE checksum invalid",
+                severity=Severity.LOW, category="format",
+                detail=f"Stored checksum 0x{stored:08x} != computed 0x{computed:08x}; "
+                       "the file was patched/modified after linking (drivers and "
+                       "signed binaries normally carry a correct checksum).")
+
+        # --- timestamp ---
+        ts = pe.FILE_HEADER.TimeDateStamp
+        if ts == 0:
+            yield Finding(
+                analyzer=self.name, title="Zeroed compile timestamp",
+                severity=Severity.LOW, category="anti-analysis",
+                detail="TimeDateStamp=0 hides build time (anti-forensics, or a "
+                       "reproducible build).")
+        elif not is_repro and (ts > int(time.time()) + 86400 or ts >= 0xF0000000):
+            when = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d") \
+                if ts < 0xF0000000 else f"raw 0x{ts:08x}"
+            yield Finding(
+                analyzer=self.name, title="Future/forged compile timestamp",
+                severity=Severity.MEDIUM, category="anti-analysis",
+                detail=f"TimeDateStamp ({when}) is in the future; commonly forged "
+                       "to defeat timeline analysis.")
+
+    def _manifest_and_debug(self, pe, data: bytes) -> Iterable[Finding]:
+        """requestedExecutionLevel from the embedded manifest, and the PDB path
+        from the debug directory (an attribution IOC)."""
+        # Debug directory -> CodeView PDB path.
+        for dbg in getattr(pe, "DIRECTORY_ENTRY_DEBUG", []) or []:
+            pdb = getattr(getattr(dbg, "entry", None), "PdbFileName", None)
+            if not pdb:
+                continue
+            path = pdb.rstrip(b"\x00").decode("latin1", "ignore")
+            if not path:
+                continue
+            leaks_user = bool(re.search(r"[A-Za-z]:\\Users\\|/home/", path))
+            yield Finding(
+                analyzer=self.name, title="Debug PDB path present",
+                severity=Severity.LOW if leaks_user else Severity.INFO,
+                category="metadata",
+                detail=(f"PDB path: {path}" + (" (leaks developer username/layout)"
+                        if leaks_user else "")),
+                data={"pdb_path": path})
+            break
+
+        # RT_MANIFEST (resource type 24) -> requestedExecutionLevel.
+        if not hasattr(pe, "DIRECTORY_ENTRY_RESOURCE"):
+            return
+        for rtype in pe.DIRECTORY_ENTRY_RESOURCE.entries:
+            if getattr(rtype, "id", None) != 24:  # RT_MANIFEST
+                continue
+            for rid in getattr(getattr(rtype, "directory", None), "entries", []):
+                for lang in getattr(getattr(rid, "directory", None), "entries", []):
+                    try:
+                        off = lang.data.struct.OffsetToData
+                        size = min(lang.data.struct.Size, 65536)
+                        blob = pe.get_data(off, size).decode("latin1", "ignore")
+                    except Exception:
+                        continue
+                    m = re.search(r"requestedExecutionLevel[^>]*level\s*=\s*"
+                                  r"['\"]([a-zA-Z]+)['\"]", blob)
+                    if m and m.group(1).lower() in ("requireadministrator",
+                                                    "highestavailable"):
+                        yield Finding(
+                            analyzer=self.name,
+                            title=f"Manifest requests elevation ({m.group(1)})",
+                            severity=Severity.LOW, category="privilege",
+                            detail="The application manifest asks to run elevated; "
+                                   "combined with other traits this supports a "
+                                   "privilege-escalation intent. ATT&CK: T1548.002.")
+                        return
 
     @staticmethod
     def _version_info(pe) -> dict:
