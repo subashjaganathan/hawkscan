@@ -47,3 +47,23 @@ def test_standalone_dex_detection(tmp_path):
     ctx = AnalysisContext(info=info, content=dex.read_bytes())
     titles = [f.title for f in AndroidAnalyzer().analyze(ctx)]
     assert any("shell commands" in t for t in titles)
+
+
+def test_apk_packer_payload_and_iocs(tmp_path):
+    apk = tmp_path / "p.apk"
+    with zipfile.ZipFile(apk, "w") as zf:
+        zf.writestr("AndroidManifest.xml",
+                    "android.permission.SEND_SMS".encode("utf-16-le"))
+        zf.writestr("classes.dex",
+                    b"dex\n035\x00 sendTextMessage MediaProjection "
+                    b"http://evil-apk-c2.com/cfg\x00")
+        zf.writestr("lib/arm64-v8a/libjiagu.so", b"\x7fELF")
+        zf.writestr("assets/payload.dex", b"dex\n035\x00")
+    ctx = AnalysisContext(info=fileinfo.inspect(apk), content=apk.read_bytes())
+    fnds = list(AndroidAnalyzer().analyze(ctx))
+    titles = [f.title for f in fnds]
+    assert any("packer/protector: Qihoo 360 Jiagu" in t for t in titles)
+    assert any("Embedded secondary payload" in t for t in titles)
+    assert any("Screen capture" in t for t in titles)
+    iocs = [i for f in fnds for i in f.data.get("urls", [])]
+    assert "http://evil-apk-c2.com/cfg" in iocs

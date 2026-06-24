@@ -2,6 +2,17 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.18.0]
+
+### Added
+- **Android analyzer depth** (module improvement pass 7): APK packer/protector
+  detection (Jiagu, Bangcle, DexProtector, Ijiami, Tencent Legu, etc.), native-
+  library/ABI reporting, second-stage payload detection (DEX/APK/JAR or
+  disguised archive in assets/res), C2 URL recovery from the DEX string pool,
+  and expanded suspicious-API coverage (MediaProjection screen capture,
+  AudioRecord, accessibility auto-click, application overlay, WebView JS
+  bridge, emulator/debugger detection, DownloadManager, crypto).
+
 ## [1.17.0]
 
 ### Added

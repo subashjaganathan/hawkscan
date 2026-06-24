@@ -14,6 +14,7 @@ spirit to the quick triage other tools provide.
 
 from __future__ import annotations
 
+import re
 import zipfile
 from typing import Iterable
 
@@ -56,9 +57,31 @@ _SUSPICIOUS_METHODS: list[tuple[str, str, Severity, str]] = [
     ("resetPassword", "Can reset device password (ransomware)", Severity.HIGH, "device-admin"),
     ("getInstalledPackages", "Enumerates installed apps", Severity.LOW, "discovery"),
     ("TYPE_SYSTEM_ALERT", "Draws system overlay (phishing/clickjacking)", Severity.MEDIUM, "overlay"),
+    ("TYPE_APPLICATION_OVERLAY", "Application overlay window (phishing/clickjacking)", Severity.HIGH, "overlay"),
+    ("performGlobalAction", "Accessibility global actions (auto-click/UI fraud)", Severity.HIGH, "accessibility"),
+    ("dispatchGesture", "Accessibility gesture dispatch (auto-tap)", Severity.HIGH, "accessibility"),
+    ("MediaProjection", "Screen capture (MediaProjection)", Severity.HIGH, "spyware"),
+    ("AudioRecord", "Microphone recording (AudioRecord)", Severity.MEDIUM, "spyware"),
+    ("MediaRecorder", "Audio/video recording (MediaRecorder)", Severity.LOW, "spyware"),
+    ("getLastKnownLocation", "Location tracking (getLastKnownLocation)", Severity.MEDIUM, "spyware"),
+    ("addJavascriptInterface", "WebView JS bridge (injection/RCE surface)", Severity.MEDIUM, "webview"),
+    ("ro.kernel.qemu", "Emulator detection (qemu)", Severity.MEDIUM, "anti-analysis"),
+    ("isDebuggerConnected", "Debugger detection", Severity.LOW, "anti-analysis"),
+    ("DownloadManager", "Uses DownloadManager (payload fetch)", Severity.LOW, "download"),
+    ("javax/crypto/Cipher", "Symmetric crypto (Cipher)", Severity.LOW, "crypto"),
     ("/system/bin/su", "References su binary (root check)", Severity.MEDIUM, "root"),
     ("supersu", "References SuperSU (root)", Severity.LOW, "root"),
 ]
+
+# APK packer/protector native libraries (the real DEX is unpacked at runtime).
+_PACKERS = {
+    "libjiagu": "Qihoo 360 Jiagu", "libsecexe": "Bangcle/SecShell",
+    "libsecmain": "Bangcle/SecShell", "libDexHelper": "DexProtector",
+    "libapassembly": "Ijiami", "libexec.so": "Ijiami", "libchaosvmp": "Naga",
+    "libddog": "Tencent Legu", "libshellx": "Tencent", "libtup.so": "Tencent",
+    "libmobisec": "Alibaba", "libtosprotection": "Tongfudun",
+}
+_URL_RE = re.compile(r"https?://[^\s\"'<>)\\]{4,300}", re.I)
 
 
 class AndroidAnalyzer(Analyzer):
@@ -98,6 +121,7 @@ class AndroidAnalyzer(Analyzer):
                 findings.extend(self._scan_permissions(manifest))
             if dex:
                 findings.extend(self._scan_dex(bytes(dex)))
+            findings.extend(self._scan_structure(ctx.path, names))
 
         yield from findings
         family = self._classify(findings)
@@ -171,3 +195,70 @@ class AndroidAnalyzer(Analyzer):
                     analyzer=self.name, title=title, severity=sev,
                     category=category, detail=f"DEX references {token!r}.",
                 )
+        # Recover C2 / payload URLs embedded in the DEX string pool.
+        urls = sorted({u for u in _URL_RE.findall(blob)
+                       if "schemas.android.com" not in u
+                       and "w3.org" not in u and "apache.org" not in u})[:15]
+        if urls:
+            yield Finding(
+                analyzer=self.name, title=f"{len(urls)} URL(s) in DEX strings",
+                severity=Severity.LOW, category="network",
+                detail="; ".join(urls[:8]), data={"urls": urls})
+
+    def _scan_structure(self, path, names) -> Iterable[Finding]:
+        """APK packaging traits: native libs, runtime packers, and second-stage
+        payloads hidden in assets/res."""
+        # Native libraries (the real logic may live in the .so, not the DEX).
+        native = sorted({n.split("/")[1] for n in names
+                         if n.startswith("lib/") and "/" in n[4:] and n.endswith(".so")})
+        if any(n.startswith("lib/") and n.endswith(".so") for n in names):
+            yield Finding(
+                analyzer=self.name, title="Contains native libraries (JNI)",
+                severity=Severity.INFO, category="format",
+                detail="ABIs: " + (", ".join(native) if native else "?"))
+
+        # Runtime packer/protector.
+        for n in names:
+            base = n.rsplit("/", 1)[-1]
+            for marker, packer in _PACKERS.items():
+                if base.startswith(marker) or marker in n:
+                    yield Finding(
+                        analyzer=self.name, title=f"APK packer/protector: {packer}",
+                        severity=Severity.MEDIUM, category="packer",
+                        detail=f"Bundles {marker!r}; the real DEX is unpacked at "
+                               "runtime, defeating static DEX scanning.")
+                    break
+            else:
+                continue
+            break
+
+        # Second-stage payload hidden outside the standard dex (dropper).
+        try:
+            with zipfile.ZipFile(path) as zf:
+                for n in names:
+                    low = n.lower()
+                    if not (low.startswith(("assets/", "res/raw/")) or "/assets/" in low):
+                        continue
+                    if low.endswith((".dex", ".apk", ".jar")) or \
+                            low.endswith(".so") and "assets" in low:
+                        yield Finding(
+                            analyzer=self.name,
+                            title=f"Embedded secondary payload: {n.split('/')[-1]}",
+                            severity=Severity.HIGH, category="dropper",
+                            detail="A DEX/APK/JAR bundled in assets is loaded at "
+                                   "runtime; a common dropper/staging technique.")
+                        return
+                    try:
+                        head = zf.open(n).read(4)
+                    except Exception:
+                        continue
+                    if head[:2] == b"PK" and low.endswith((".dat", ".bin", ".png", ".db")):
+                        yield Finding(
+                            analyzer=self.name,
+                            title=f"Disguised archive payload in assets: {n.split('/')[-1]}",
+                            severity=Severity.MEDIUM, category="dropper",
+                            detail="An asset with a benign extension is actually a "
+                                   "ZIP/APK/JAR (hidden second stage).")
+                        return
+        except Exception:
+            return
