@@ -76,3 +76,21 @@ def test_expanded_api_coverage():
     assert "Credential Access" in caps
     assert "System Discovery" in caps
     assert len(cap.API_DB) >= 130
+
+
+def test_new_capability_combinations():
+    from hawkscan.intel import capabilities as cap
+    def names(*a):
+        return {h["name"] for h in cap.detect_combinations(set(a))}
+    assert "Windows service persistence" in names(
+        "OpenSCManagerA", "CreateServiceA", "StartServiceA")
+    assert "WinINet/WinHTTP C2" in names(
+        "InternetOpenA", "InternetConnectA", "HttpSendRequestA")
+    assert "Bulk file encryption (ransomware)" in names(
+        "CryptAcquireContextA", "CryptGenKey", "CryptEncrypt")
+    assert "Anti-debugging" in names(
+        "IsDebuggerPresent", "CheckRemoteDebuggerPresent", "NtQueryInformationProcess")
+    # Two anti-debug primitives is below threshold (was over-firing).
+    assert "Anti-debugging" not in names("IsDebuggerPresent", "OutputDebugStringA")
+    # Benign common APIs trigger nothing.
+    assert names("CreateFileW", "ReadFile", "WriteFile", "CloseHandle") == set()

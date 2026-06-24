@@ -375,6 +375,78 @@ COMBINATIONS: list[Combo] = [
         detail="Token duplication/impersonation primitives (also common in "
                "legitimate privileged services).",
     ),
+    Combo(
+        name="Anti-debugging",
+        any_of=["IsDebuggerPresent", "CheckRemoteDebuggerPresent",
+                "NtQueryInformationProcess", "OutputDebugStringA",
+                "NtSetInformationThread", "ZwQueryInformationProcess"],
+        min_count=3, severity="medium", category="Anti-Analysis",
+        mitre=("T1622", "Debugger Evasion"),
+        detail="Multiple debugger-detection primitives present together.",
+    ),
+    Combo(
+        name="Process enumeration (injection recon)",
+        any_of=["CreateToolhelp32Snapshot", "Process32First", "Process32Next",
+                "Process32FirstW", "Process32NextW", "Thread32First",
+                "OpenProcess"],
+        min_count=3, severity="medium", category="Discovery",
+        mitre=("T1057", "Process Discovery"),
+        detail="Process/thread enumeration primitives; precedes targeting for "
+               "injection or termination.",
+    ),
+    Combo(
+        name="Windows service persistence",
+        any_of=["OpenSCManagerA", "OpenSCManagerW", "CreateServiceA",
+                "CreateServiceW", "StartServiceA", "StartServiceW",
+                "ChangeServiceConfig2A", "ChangeServiceConfig2W"],
+        min_count=2, severity="medium", category="Persistence",
+        mitre=("T1543.003", "Windows Service"),
+        detail="Service-control primitives for installing/altering a service.",
+    ),
+    Combo(
+        name="WinINet/WinHTTP C2",
+        any_of=["InternetOpenA", "InternetOpenW", "InternetConnectA",
+                "InternetConnectW", "HttpOpenRequestA", "HttpSendRequestA",
+                "HttpSendRequestW", "WinHttpOpen", "WinHttpConnect",
+                "WinHttpSendRequest"],
+        min_count=2, severity="medium", category="Networking",
+        mitre=("T1071.001", "Application Layer Protocol: Web"),
+        detail="HTTP client primitives chained for C2/download.",
+    ),
+    Combo(
+        name="Raw socket C2",
+        any_of=["socket", "connect", "send", "recv", "WSASocketA",
+                "WSASocketW", "WSAConnect", "WSAStartup"],
+        min_count=4, severity="medium", category="Networking",
+        mitre=("T1095", "Non-Application Layer Protocol"),
+        detail="Berkeley/Winsock socket primitives for custom-protocol C2.",
+    ),
+    Combo(
+        name="Bulk file encryption (ransomware)",
+        any_of=["CryptAcquireContextA", "CryptAcquireContextW", "CryptGenKey",
+                "CryptEncrypt", "CryptDeriveKey", "CryptImportKey",
+                "BCryptEncrypt", "BCryptGenerateSymmetricKey"],
+        min_count=2, severity="medium", category="Impact",
+        mitre=("T1486", "Data Encrypted for Impact"),
+        detail="Cryptographic key+encrypt primitives; ransomware data-encryption "
+               "pattern (also legitimate crypto software).",
+    ),
+    Combo(
+        name="Screen capture",
+        any_of=["BitBlt", "CreateCompatibleDC", "CreateCompatibleBitmap",
+                "GetDIBits", "GetDC"],
+        min_count=3, severity="low", category="Collection",
+        mitre=("T1113", "Screen Capture"),
+        detail="GDI screen-grab primitives (spyware/RAT screenshot capability).",
+    ),
+    Combo(
+        name="Clipboard capture",
+        any_of=["OpenClipboard", "GetClipboardData", "SetClipboardViewer",
+                "AddClipboardFormatListener"],
+        min_count=2, severity="low", category="Collection",
+        mitre=("T1115", "Clipboard Data"),
+        detail="Clipboard-read primitives (credential/crypto-address theft).",
+    ),
 ]
 
 

@@ -2,6 +2,16 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.23.0]
+
+### Added
+- **Capability/ATT&CK combinations** (module improvement pass 12): seven new
+  high-confidence multi-API patterns that drive the score - anti-debugging
+  (T1622), process-enumeration injection recon (T1057), Windows service
+  persistence (T1543.003), WinINet/WinHTTP C2 (T1071.001), raw-socket C2
+  (T1095), bulk file encryption/ransomware (T1486), and screen/clipboard
+  capture (T1113/T1115). FP-tuned against 151 signed system binaries.
+
 ## [1.22.0]
 
 ### Added
