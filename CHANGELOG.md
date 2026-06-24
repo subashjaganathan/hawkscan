@@ -2,6 +2,15 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.25.0]
+
+### Added
+- **Binary profiler depth** (module improvement pass 14): named runtime
+  packer/protector detection (Themida/WinLicense, VMProtect, ASPack,
+  ASProtect, MPRESS, PECompact, Enigma, Obsidium, NsPack, Petite, FSG, Upack,
+  PELock, kkrunchy, Armadillo, MoleBox, ExeStealth) and additional runtimes
+  (Delphi, Visual Basic 6, Electron/Node). FP-tuned vs 120 signed binaries.
+
 ## [1.24.0]
 
 ### Added

@@ -484,3 +484,20 @@ def test_secrets_no_fp_on_plain_config(tmp_path):
     from hawkscan.analyzers.secrets_analyzer import SecretsAnalyzer
     ctx = _ctx(tmp_path, "c.ini", b"name=app\nport=8080\nlog_level=info\ntimeout=30\n")
     assert list(SecretsAnalyzer().analyze(ctx)) == []
+
+
+def test_binprofile_packer_detection(tmp_path):
+    from hawkscan.analyzers.binprofile import BinProfileAnalyzer
+    from hawkscan.analyzers.base import AnalysisContext
+    from hawkscan.core import fileinfo
+    f = tmp_path / "p.exe"
+    f.write_bytes(b"MZ" + b"\x00" * 64)
+    ctx = AnalysisContext(info=fileinfo.inspect(f), content=f.read_bytes())
+    ctx.cache["strings"] = [".themida", "kernel32.dll", "WinLicense"]
+    titles = [t.title for t in BinProfileAnalyzer().analyze(ctx)]
+    assert any("Themida" in t for t in titles)
+    # Clean MSVC strings -> no packer finding.
+    ctx2 = AnalysisContext(info=fileinfo.inspect(f), content=f.read_bytes())
+    ctx2.cache["strings"] = ["Microsoft Visual C++", "kernel32.dll", "user32.dll"]
+    assert not any("Packed/protected" in t.title
+                   for t in BinProfileAnalyzer().analyze(ctx2))

@@ -35,6 +35,36 @@ _RUNTIMES: list[tuple[str, tuple[str, ...], str]] = [
      "Python bundled with PyInstaller; the embedded .pyc can be extracted."),
     ("AutoIt", ("AU3!", "AutoIt v3", "This is a third-party compiled AutoIt"),
      "AutoIt-compiled script; commonly used by commodity malware."),
+    ("Delphi", ("Borland", "Embarcadero", "TMethodImplementationIntercept",
+                "Delphi", "SOFTWARE\\Borland\\"),
+     "Delphi/Pascal-compiled binary."),
+    ("Visual Basic 6", ("MSVBVM60.dll", "VB5!", "ThunRTMain"),
+     "Legacy VB6 binary."),
+    ("Electron/Node", ("electron.asar", "app.asar", "node.dll", "v8_context"),
+     "Electron/Node.js packaged app; JS lives in app.asar."),
+]
+
+# Named runtime packers/protectors. Markers are section names or signature
+# strings that surface in the extracted-strings blob (which includes the PE
+# header). Naming the packer is more useful than a generic "packed" flag.
+_PACKERS: list[tuple[str, tuple[str, ...]]] = [
+    ("Themida/WinLicense", (".themida", "WinLicense", ".winlice")),
+    ("VMProtect", (".vmp0", ".vmp1", "VMProtect")),
+    ("ASPack", (".aspack", ".adata")),
+    ("ASProtect", (".aspr", "ASProtect")),
+    ("MPRESS", ("MPRESS1", "MPRESS2")),
+    ("PECompact", ("PEC2", "PECompact2", "pec1")),
+    ("Enigma Protector", (".enigma1", ".enigma2")),
+    ("Obsidium", ("Obsidium",)),
+    ("NsPack", (".nsp0", ".nsp1", "NsPacK")),
+    ("Petite", (".petite",)),
+    ("FSG", ("FSG!",)),
+    ("Upack", (".Upack",)),
+    ("PELock", ("PELock",)),
+    ("kkrunchy", ("kkrunchy",)),
+    ("Armadillo", ("Armadillo", ".pdata\x00\x00AD8")),
+    ("MoleBox", ("MoleBox",)),
+    ("ExeStealth", ("ExeStealth",)),
 ]
 
 
@@ -60,6 +90,17 @@ class BinProfileAnalyzer(Analyzer):
                     detail=note,
                     data={"runtime": label},
                 )
+
+        # Named runtime packer/protector detection.
+        for packer, markers in _PACKERS:
+            if any(m in blob for m in markers):
+                yield Finding(
+                    analyzer=self.name, title=f"Packed/protected with {packer}",
+                    severity=Severity.MEDIUM, category="packer",
+                    detail=f"Section/signature markers of {packer} present; the real "
+                           "code is compressed/encrypted and unpacked at runtime.",
+                    data={"packer": packer})
+                break
 
         # Deeper Go profiling: recover build metadata (module path, version,
         # dependencies) from the embedded build-info, useful for attribution.
