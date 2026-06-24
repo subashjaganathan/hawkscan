@@ -2,6 +2,17 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.15.0]
+
+### Added
+- **PDF analyzer depth** (module improvement pass 4): extracts JavaScript
+  from literal /JS strings and FlateDecode-compressed streams, deobfuscates
+  it and recovers C2/payload URLs as IOCs; maps known PDF-exploit JS APIs to
+  CVEs (util.printf/CVE-2008-2992, Collab.getIcon/CVE-2009-0927, media.
+  newPlayer/CVE-2009-4324, collectEmailInfo/CVE-2007-5659, etc.); heap-spray
+  shellcode heuristic; /Launch target and /URI IOC extraction; OpenAction+JS
+  auto-execution combo; /Encrypt and /XFA detection.
+
 ## [1.14.0]
 
 ### Added

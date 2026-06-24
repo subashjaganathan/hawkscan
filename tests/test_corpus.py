@@ -112,7 +112,8 @@ def test_compressed_pdf_javascript(tmp_path):
            + str(len(stream)).encode() + b" >>\nstream\n" + stream
            + b"\nendstream\nendobj\n")
     r = _scan(tmp_path, "x.pdf", pdf)
-    assert any("compressed PDF stream" in f.title for f in r.findings)
+    # JS hidden in a FlateDecode stream is now decompressed, extracted and analysed.
+    assert any("JavaScript extracted" in f.title for f in r.findings)
 
 
 def test_archive_member_rescanned(tmp_path):

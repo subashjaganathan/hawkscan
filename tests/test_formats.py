@@ -327,3 +327,30 @@ def test_elf_structural_traits(tmp_path):
     titles = [f.title for f in ELFAnalyzer().analyze(ctx)]
     assert any("RWX" in t for t in titles)
     assert any("Section headers absent" in t for t in titles)
+
+
+def test_pdf_exploit_js_extraction_and_iocs(tmp_path):
+    from hawkscan.analyzers.pdf_analyzer import PDFAnalyzer
+    js = ("var x=util.printf('%45000f',1);var u='http://evil-pdf-c2.com/p.exe';"
+          "var s=unescape('%u9090%u9090%u4141%u4242%u4343%u4444%u5050%u6060');")
+    pdf = (b"%PDF-1.5\n1 0 obj<</OpenAction<</S/JavaScript/JS(" + js.encode()
+           + b")>>>>endobj\n%%EOF")
+    ctx = _ctx(tmp_path, "x.pdf", pdf)
+    assert ctx.info.file_type == "pdf"
+    fnds = list(PDFAnalyzer().analyze(ctx))
+    titles = [f.title for f in fnds]
+    assert any("Auto-executing JavaScript" in t for t in titles)
+    assert any("util.printf" in t for t in titles)
+    assert any("Heap-spray" in t for t in titles)
+    iocs = [i for f in fnds for i in f.data.get("urls", [])]
+    assert "http://evil-pdf-c2.com/p.exe" in iocs
+
+
+def test_pdf_launch_target_extracted(tmp_path):
+    import zlib
+    from hawkscan.analyzers.pdf_analyzer import PDFAnalyzer
+    pdf = (b"%PDF-1.7\n3 0 obj<</Type/Action/S/Launch/F(cmd.exe /c calc)>>endobj\n"
+           b"%%EOF")
+    ctx = _ctx(tmp_path, "y.pdf", pdf)
+    titles = [f.title for f in PDFAnalyzer().analyze(ctx)]
+    assert any("Launch action target: cmd.exe" in t for t in titles)
