@@ -2,6 +2,17 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.30.0]
+
+### Added
+- **New YARA rule pack `hawkscan_stealers.yar`** (6 original rules, 77 -> 83
+  bundled): browser-credential infostealer (browser stores + wallet/exfil),
+  clipboard crypto-clipper (clipboard APIs + hardcoded wallet address),
+  in-memory shellcode loader (process-injection API triad in a PE), Cobalt
+  Strike beacon (default named pipes / reflective loader), keylogger (keystroke
+  log markers + capture API), and .NET RAT internal markers. Conservative
+  multi-indicator conditions; verified to not match benign prose.
+
 ## [1.29.0]
 
 ### Added

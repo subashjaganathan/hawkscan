@@ -40,3 +40,31 @@ def test_each_bundled_pack_compiles(path):
 def test_all_bundled_packs_compile_together():
     sources = {os.path.basename(p): p for p in _rule_files()}
     yara.compile(filepaths=sources)
+
+
+def test_stealers_pack_detects_and_no_fp():
+    rules = yara.compile(
+        filepath=os.path.join(_RULES_DIR, "hawkscan_stealers.yar"))
+
+    def hit(data):
+        return {m.rule for m in rules.match(data=data)}
+
+    # 0x5c = backslash; build the real named-pipe path unambiguously.
+    bs = b"\x5c"
+    pipe = bs + bs + b".\x5cpipe\x5cmsagent_7f3a"
+    assert "HawkScan_CobaltStrike_Beacon_Indicators" in hit(b"x " + pipe + b" y")
+    assert "HawkScan_CobaltStrike_Beacon_Indicators" in hit(
+        b"ReflectiveLoader ... beacon.dll")
+    assert "HawkScan_Infostealer_BrowserCredentialTheft" in hit(
+        b"\x5cGoogle\x5cChrome\x5cUser Data Login Data Local State wallet.dat")
+    assert "HawkScan_Clipboard_CryptoClipper" in hit(
+        b"OpenClipboard GetClipboardData SetClipboardData "
+        b"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
+    assert "HawkScan_Shellcode_Loader_InjectionTriad" in hit(
+        b"MZ\x90\x00 VirtualAllocEx WriteProcessMemory CreateRemoteThread")
+    assert "HawkScan_Keylogger_LogFormat" in hit(
+        b"[ENTER][BACKSPACE][TAB] GetAsyncKeyState")
+    assert "HawkScan_DotNet_RAT_Markers" in hit(
+        b"AsyncClient Server Certificate DoProcessKill")
+    # Benign prose must not match any stealer rule.
+    assert hit(b"A normal note about chrome browsers and clipboards.") == set()
