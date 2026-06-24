@@ -68,3 +68,23 @@ def test_stealers_pack_detects_and_no_fp():
         b"AsyncClient Server Certificate DoProcessKill")
     # Benign prose must not match any stealer rule.
     assert hit(b"A normal note about chrome browsers and clipboards.") == set()
+
+
+def test_ransomware_pack_detects_and_no_fp():
+    rules = yara.compile(
+        filepath=os.path.join(_RULES_DIR, "hawkscan_ransomware.yar"))
+
+    def hit(data):
+        return {m.rule for m in rules.match(data=data)}
+
+    assert "HawkScan_Ransomware_RecoveryTampering" in hit(
+        b"cmd /c vssadmin delete shadows /all /quiet & bcdedit /set "
+        b"recoveryenabled no")
+    assert "HawkScan_Ransomware_FamilyArtifacts" in hit(
+        b"drop @WanaDecryptor@.exe and rename to .wncry")
+    assert "HawkScan_Ransomware_EncryptionBehavior" in hit(
+        b"CryptGenKey FindFirstFile your files have been encrypted .onion")
+    assert "HawkScan_Cryptominer_StratumPool" in hit(
+        b"pool stratum+tcp://xmr.pool.example:3333 user wallet")
+    # Benign prose must not match.
+    assert hit(b"A guide to backups and file encryption best practices.") == set()

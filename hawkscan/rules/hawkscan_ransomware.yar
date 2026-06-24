@@ -1,0 +1,95 @@
+/*
+ * HawkScan ransomware / cryptominer rules (original).
+ * High-signal detections built on distinctive, low-false-positive indicators:
+ * recovery-tampering command chains, family-specific ransom-note filenames and
+ * extensions, encryption-behaviour combinations, and mining-pool protocols.
+ */
+
+rule HawkScan_Ransomware_RecoveryTampering
+{
+    meta:
+        description = "Ransomware recovery sabotage: shadow-copy + backup deletion"
+        severity = "high"
+        category = "ransomware"
+    strings:
+        $vss1 = "vssadmin" nocase
+        $vss2 = "delete shadows" nocase
+        $vss3 = "resize shadowstorage" nocase
+        $bcd1 = "bcdedit" nocase
+        $bcd2 = "recoveryenabled no" nocase
+        $bcd3 = "bootstatuspolicy ignoreallfailures" nocase
+        $wb = "wbadmin delete catalog" nocase
+        $wmic = "shadowcopy delete" nocase
+        $cat = "wbadmin delete systemstatebackup" nocase
+    condition:
+        ($vss1 and ($vss2 or $vss3)) or ($bcd1 and ($bcd2 or $bcd3))
+        or $wb or $wmic or $cat
+}
+
+rule HawkScan_Ransomware_FamilyArtifacts
+{
+    meta:
+        description = "Distinctive ransom-note filenames / extensions of known families"
+        severity = "high"
+        category = "ransomware"
+    strings:
+        $wannacry1 = "@WanaDecryptor@" nocase
+        $wannacry2 = ".wncry" nocase
+        $wannacry3 = "WANACRY!" nocase
+        $lockbit1 = "Restore-My-Files.txt" nocase
+        $lockbit2 = "LockBit_Ransomware.hta" nocase
+        $ryuk = "RyukReadMe" nocase
+        $conti = "CONTI_README.txt" nocase
+        $revil = "Sodinokibi" nocase
+        $hive = "HOW_TO_DECRYPT.txt" nocase
+        $phobos = "info.hta" nocase
+        $blackcat = "RECOVER-" nocase
+        $blackcat2 = "-FILES.txt" nocase
+        $maze = "DECRYPT-FILES.txt" nocase
+    condition:
+        any of ($wannacry*) or any of ($lockbit*) or $ryuk or $conti
+        or $revil or $hive or $maze or ($blackcat and $blackcat2)
+        or ($phobos and $blackcat2)
+}
+
+rule HawkScan_Ransomware_EncryptionBehavior
+{
+    meta:
+        description = "Ransomware encryption behaviour: crypto + enumeration + note"
+        severity = "high"
+        category = "ransomware"
+    strings:
+        $c1 = "CryptEncrypt"
+        $c2 = "CryptGenKey"
+        $c3 = "BCryptEncrypt"
+        $c4 = "CryptImportKey"
+        $e1 = "FindFirstFile" nocase
+        $e2 = "FindNextFile" nocase
+        $e3 = "GetLogicalDrives"
+        $n1 = "your files have been encrypted" nocase
+        $n2 = "all your files" nocase
+        $n3 = "to decrypt" nocase
+        $n4 = ".onion" nocase
+    condition:
+        1 of ($c*) and 1 of ($e*) and 1 of ($n*)
+}
+
+rule HawkScan_Cryptominer_StratumPool
+{
+    meta:
+        description = "Cryptocurrency miner: stratum mining-pool protocol + miner markers"
+        severity = "high"
+        category = "cryptominer"
+    strings:
+        $s1 = "stratum+tcp://" nocase
+        $s2 = "stratum+ssl://" nocase
+        $m1 = "xmrig" nocase
+        $m2 = "randomx" nocase
+        $m3 = "--donate-level" nocase
+        $m4 = "cryptonight" nocase
+        $m5 = "minergate" nocase
+        $m6 = "nanopool" nocase
+        $m7 = "supportxmr" nocase
+    condition:
+        any of ($s*) or (2 of ($m*))
+}

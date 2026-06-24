@@ -2,6 +2,16 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.31.0]
+
+### Added
+- **New YARA rule pack `hawkscan_ransomware.yar`** (4 original rules, 83 -> 87
+  bundled): recovery-tampering command chains (vssadmin/bcdedit/wbadmin),
+  family-specific ransom-note artifacts (WannaCry/LockBit/Ryuk/Conti/REvil/
+  Hive/Maze/BlackCat/Phobos), encryption-behaviour combination (crypto API +
+  file enumeration + ransom-note text), and cryptominer detection (stratum
+  mining-pool protocol + miner markers). Verified to not match benign prose.
+
 ## [1.30.0]
 
 ### Added
