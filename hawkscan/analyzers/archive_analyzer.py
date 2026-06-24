@@ -124,7 +124,6 @@ class ArchiveAnalyzer(Analyzer):
     def _scan_members(self, ctx, infos) -> Iterable[Finding]:
         from ..core.engine import Engine
         from ..analyzers import ALL_ANALYZERS
-        import tempfile
         from pathlib import Path
 
         members = [i for i in infos if not i.is_dir()
@@ -136,32 +135,26 @@ class ArchiveAnalyzer(Analyzer):
         sub = Engine(analyzers=[c for c in ALL_ANALYZERS
                                 if c is not ArchiveAnalyzer])
         from ..core.findings import Verdict, Severity as Sev
-        tmp = Path(tempfile.mkdtemp(prefix="hawkscan_arc_"))
-        try:
-            with zipfile.ZipFile(ctx.path) as zf:
-                for m in members:
-                    try:
-                        blob = zf.read(m)
-                    except Exception:
-                        continue
-                    out = tmp / Path(m.filename).name
-                    try:
-                        out.write_bytes(blob)
-                        res = sub.scan(out)
-                    except Exception:
-                        continue
-                    finally:
-                        out.unlink(missing_ok=True)
-                    if res.verdict >= Verdict.SUSPICIOUS:
-                        sev = (Sev.HIGH if res.verdict >= Verdict.LIKELY_MALICIOUS
-                               else Sev.MEDIUM)
-                        yield Finding(
-                            analyzer=self.name,
-                            title=f"Archived member is {res.verdict.label}: "
-                                  f"{m.filename}",
-                            severity=sev, category="dropper",
-                            detail="A file inside the archive scanned as "
-                                   f"{res.verdict.label}.")
-        finally:
-            import shutil
-            shutil.rmtree(tmp, ignore_errors=True)
+        with zipfile.ZipFile(ctx.path) as zf:
+            for m in members:
+                try:
+                    blob = zf.read(m)
+                except Exception:
+                    continue
+                # In-memory member scan: the extracted (possibly malicious)
+                # member is never written to disk, so an on-access EDR cannot
+                # quarantine it and abort the scan.
+                try:
+                    res = sub.scan_bytes(blob, name=Path(m.filename).name)
+                except Exception:
+                    continue
+                if res.verdict >= Verdict.SUSPICIOUS:
+                    sev = (Sev.HIGH if res.verdict >= Verdict.LIKELY_MALICIOUS
+                           else Sev.MEDIUM)
+                    yield Finding(
+                        analyzer=self.name,
+                        title=f"Archived member is {res.verdict.label}: "
+                              f"{m.filename}",
+                        severity=sev, category="dropper",
+                        detail="A file inside the archive scanned as "
+                               f"{res.verdict.label}.")

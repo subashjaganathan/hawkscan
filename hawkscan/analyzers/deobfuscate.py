@@ -334,19 +334,16 @@ class DeobAnalyzer(Analyzer):
 
         # Excluding DeobAnalyzer from the sub-engine prevents infinite recursion.
         sub = Engine(analyzers=[c for c in ALL_ANALYZERS if c is not DeobAnalyzer])
-        tmp = Path(tempfile.mkdtemp(prefix="hawkscan_deob_"))
+        # In-memory re-scan: the recovered (often malicious) payload is never
+        # written to disk, so it cannot be quarantined by an on-access EDR.
         try:
-            f = tmp / "payload.bin"
-            f.write_bytes(data)
-            res = sub.scan(f)
+            res = sub.scan_bytes(data, name="payload.bin")
         except Exception as exc:
             yield Finding(analyzer=self.name,
                           title=f"Recovered hidden payload ({label})",
                           severity=Severity.LOW, category="deobfuscation",
                           detail=f"Could not re-scan recovered stage: {exc}")
             return
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
 
         sev = _VERDICT_SEV.get(res.verdict, Severity.INFO)
         top = [f.title for f in res.findings if f.severity >= Severity.MEDIUM][:4]

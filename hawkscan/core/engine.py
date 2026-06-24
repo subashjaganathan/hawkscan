@@ -151,6 +151,20 @@ class Engine:
         self.denylist = _load_hashlist(_DENYLIST_PATH)
         self.hashdb = _load_hashdb(_HASHDB_PATH)
 
+    def scan_bytes(self, data: bytes, name: str = "payload.bin") -> ScanResult:
+        """Scan in-memory bytes without writing them to disk. Used for nested
+        re-scans (deobfuscated stages, archive members) so recovered payloads
+        never land on the filesystem and trip an EDR. Path-based deep parsers
+        (office/ole/archive) self-skip because the sentinel path does not exist;
+        the content-based analyzers (strings, pe header, capability, yara,
+        script, secrets, deobfuscate, carver, entropy) all run normally."""
+        start = time.perf_counter()
+        info = fileinfo.inspect_bytes(data, name)
+        result = ScanResult(info=info)
+        self._run_analyzers(info, data, result)
+        result.duration_ms = (time.perf_counter() - start) * 1000
+        return result
+
     def scan(self, path: str | Path) -> ScanResult:
         start = time.perf_counter()
         path = Path(path)
@@ -218,9 +232,16 @@ class Engine:
         if info.size <= 64 * 1024 * 1024:
             ctx_content = path.read_bytes()
 
+        self._run_analyzers(info, ctx_content, result)
+        result.duration_ms = (time.perf_counter() - start) * 1000
+        return result
+
+    def _run_analyzers(self, info, content, result: ScanResult) -> None:
+        """Shared core: run analyzers over the content, aggregate findings into a
+        verdict. Used by both scan() (from a path) and scan_bytes() (in-memory)."""
         from ..analyzers.base import AnalysisContext
 
-        ctx = AnalysisContext(info=info, content=ctx_content)
+        ctx = AnalysisContext(info=info, content=content)
         ctx.cache["rules_dir"] = self.rules_dir
         ctx.cache["extract_dir"] = self.extract_dir
 
@@ -296,9 +317,6 @@ class Engine:
                     detail="Heuristic findings present but the context is strongly "
                            "benign; verdict capped to Low Risk."))
                 result.verdict = Verdict.LOW_RISK
-
-        result.duration_ms = (time.perf_counter() - start) * 1000
-        return result
 
     @staticmethod
     def _mismatch_finding(info: "fileinfo.FileInfo") -> Finding:

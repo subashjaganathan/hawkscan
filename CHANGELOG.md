@@ -2,6 +2,17 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.28.0]
+
+### Changed
+- **EDR-friendly in-memory analysis**: nested re-scans of recovered payloads
+  (deobfuscated stages and archive members) now run entirely in memory via the
+  new Engine.scan_bytes() / fileinfo.inspect_bytes(). HawkScan no longer writes
+  the recovered (often malicious) payload to a temp file during a normal scan,
+  so an on-access EDR such as CrowdStrike Falcon cannot quarantine it and abort
+  the scan. Detection of the nested payload is unchanged. (Explicit --extract
+  still writes carved files on request; UPX auto-unpack still uses the upx CLI.)
+
 ## [1.27.0]
 
 ### Added

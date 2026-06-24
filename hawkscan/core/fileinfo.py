@@ -227,3 +227,42 @@ def inspect(path: Path) -> FileInfo:
         ext_mismatch=ext_mismatch,
         fuzzy=fuzzy,
     )
+
+
+def inspect_bytes(data: bytes, name: str = "payload.bin") -> FileInfo:
+    """Build a FileInfo entirely from in-memory bytes - no file is read from or
+    written to disk. Used for analysing recovered/nested payloads (deobfuscated
+    stages, archive members) so live malware bytes never touch the filesystem
+    (which would trip an EDR). `name` supplies the logical extension only; the
+    `path` is a non-existent sentinel and must not be opened by analyzers."""
+    head = data[:4096]
+    md5 = hashlib.md5(data).hexdigest()
+    sha1 = hashlib.sha1(data).hexdigest()
+    sha256 = hashlib.sha256(data).hexdigest()
+    path = Path(name)
+    extension = path.suffix.lower()
+    file_type, description = detect_type(head, extension)
+
+    ext_mismatch = False
+    if extension in _EXT_TYPE_MAP:
+        compatible = _EXT_TYPE_MAP[extension]
+        normalized = "zip" if file_type in {"office-ooxml", "apk", "jar"} else file_type
+        if extension in _EXECUTABLE_EXTS:
+            if normalized not in compatible:
+                ext_mismatch = True
+        elif normalized not in compatible and file_type not in {"text", "data"}:
+            ext_mismatch = True
+
+    fuzzy = ""
+    if 50 <= len(data) <= 64 * 1024 * 1024:
+        try:
+            fuzzy = fuzzy_hash(data)
+        except Exception:
+            fuzzy = ""
+
+    return FileInfo(
+        path=path, size=len(data), md5=md5, sha1=sha1, sha256=sha256,
+        file_type=file_type, description=description, extension=extension,
+        magic_hex=head[:16].hex(" "), ext_mismatch=ext_mismatch, fuzzy=fuzzy,
+        data={"in_memory": True},
+    )
