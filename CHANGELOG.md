@@ -2,6 +2,15 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.24.0]
+
+### Added
+- **Secrets analyzer coverage** (module improvement pass 13): modern token
+  formats - Stripe, GitLab, Shopify, npm, SendGrid, Twilio, Telegram bot,
+  Discord webhook, OpenAI, Anthropic, PyPI - plus database connection strings
+  with embedded credentials and hardcoded bearer tokens. Distinctive formats
+  keep false positives low (plain config files stay clean).
+
 ## [1.23.0]
 
 ### Added

@@ -460,3 +460,27 @@ def test_lnk_structured_args_and_icon_spoof(tmp_path):
     assert any("Icon spoofing" in t for t in titles)
     assert any(f.data.get("lnk_args", "").startswith("-w hidden") for f in fnds
                if f.data.get("lnk_args"))
+
+
+def test_secrets_modern_tokens(tmp_path):
+    from hawkscan.analyzers.secrets_analyzer import SecretsAnalyzer
+    # Tokens are assembled at runtime from fragments so no contiguous secret
+    # literal appears in source (avoids secret-scanning push protection); the
+    # analyzer still sees the full token in the scanned bytes.
+    stripe = "sk_" + "live_" + "4eC39HqLyjWDarjtT1zdp7dc"
+    gitlab = "glp" + "at-" + "ABCDEFGHIJ1234567890xy"
+    anth = "sk-" + "ant-" + "api03-abcdefghijklmnopqrstuvwxyz"
+    db = "postgres://admin:" + "s3cr3t" + "@db.internal:5432/app"
+    data = f"STRIPE={stripe}\nGITLAB={gitlab}\nAN={anth}\nDB={db}\n".encode()
+    ctx = _ctx(tmp_path, "s.env", data)
+    titles = [f.title for f in SecretsAnalyzer().analyze(ctx)]
+    assert "Stripe live secret key" in titles
+    assert "GitLab personal access token" in titles
+    assert "Database connection string with credentials" in titles
+    assert "Anthropic API key" in titles
+
+
+def test_secrets_no_fp_on_plain_config(tmp_path):
+    from hawkscan.analyzers.secrets_analyzer import SecretsAnalyzer
+    ctx = _ctx(tmp_path, "c.ini", b"name=app\nport=8080\nlog_level=info\ntimeout=30\n")
+    assert list(SecretsAnalyzer().analyze(ctx)) == []
