@@ -17,6 +17,10 @@ _RISKY_EXTS = {".exe", ".scr", ".dll", ".com", ".pif", ".bat", ".cmd", ".vbs",
                ".vbe", ".js", ".jse", ".wsf", ".hta", ".ps1", ".lnk", ".jar",
                ".msi", ".cpl"}
 _DOUBLE_EXT = (".pdf.", ".doc.", ".xls.", ".jpg.", ".png.", ".txt.", ".invoice.")
+# Unicode bidirectional-control characters abused to disguise file extensions
+# (e.g. U+202E RLO turns "...gpj.exe" into a visual "...exe.jpg").
+_BIDI_CHARS = {"‪", "‫", "‬", "‭", "‮",
+               "⁦", "⁧", "⁨", "⁩", "‎", "‏"}
 
 
 class ArchiveAnalyzer(Analyzer):
@@ -49,6 +53,7 @@ class ArchiveAnalyzer(Analyzer):
             )
 
         risky = []
+        files = [i for i in infos if not i.is_dir()]
         for i in infos:
             name = i.filename.lower()
             ext = "." + name.rsplit(".", 1)[-1] if "." in name else ""
@@ -62,15 +67,41 @@ class ArchiveAnalyzer(Analyzer):
                     category="masquerading",
                     detail="Member name disguises an executable as a document/image.",
                 )
+            # Bidi/RTL-override extension spoofing.
+            if any(c in i.filename for c in _BIDI_CHARS):
+                yield Finding(
+                    analyzer=self.name,
+                    title="Bidirectional-control character in member name",
+                    severity=Severity.HIGH, category="masquerading",
+                    detail="A member filename contains a Unicode RTL/bidi-override "
+                           "character used to disguise the real file extension.")
+            # Zip Slip / absolute path traversal in member name.
+            fn = i.filename.replace("\\", "/")
+            if fn.startswith("/") or fn[1:3] == ":/" or "../" in fn:
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"Path-traversal member name (Zip Slip): {i.filename}",
+                    severity=Severity.HIGH, category="exploit",
+                    detail="Member path escapes the extraction directory; can "
+                           "overwrite arbitrary files on extraction.")
 
         if risky:
-            yield Finding(
-                analyzer=self.name,
-                title=f"{len(risky)} executable/script member(s) in archive",
-                severity=Severity.MEDIUM,
-                category="dropper",
-                detail="; ".join(risky[:8]),
-            )
+            # A lone executable/script member is the classic malspam wrapper.
+            if len(files) == 1 and len(risky) == 1:
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"Archive wraps a single executable/script: {risky[0]}",
+                    severity=Severity.HIGH, category="dropper",
+                    detail="The archive's only content is an executable/script - the "
+                           "typical shape of a malspam payload wrapper.")
+            else:
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"{len(risky)} executable/script member(s) in archive",
+                    severity=Severity.MEDIUM,
+                    category="dropper",
+                    detail="; ".join(risky[:8]),
+                )
 
         # Zip-bomb heuristic: extreme compression ratio.
         total_comp = sum(i.compress_size for i in infos) or 1

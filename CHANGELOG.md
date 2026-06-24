@@ -2,6 +2,14 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.19.0]
+
+### Added
+- **Archive analyzer depth** (module improvement pass 8): Unicode RTL/bidi-
+  override filename spoofing detection, Zip-Slip path-traversal member names,
+  and a dedicated flag for the malspam wrapper shape (archive whose only
+  content is a single executable/script).
+
 ## [1.18.0]
 
 ### Added

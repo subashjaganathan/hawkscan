@@ -245,3 +245,26 @@ def test_eval_packer_unrolled(tmp_path):
     assert r.verdict >= Verdict.SUSPICIOUS
     iocs = [i for f in r.findings for i in f.data.get("urls", [])]
     assert any("evil-c2.com/gate" in i for i in iocs)
+
+
+def test_archive_lone_exe_and_zipslip(tmp_path):
+    import zipfile
+    from hawkscan.analyzers.archive_analyzer import ArchiveAnalyzer
+    from hawkscan.analyzers.base import AnalysisContext
+    from hawkscan.core import fileinfo
+    # Lone executable wrapper.
+    z1 = tmp_path / "a.zip"
+    with zipfile.ZipFile(z1, "w") as zf:
+        zf.writestr("invoice.exe", b"MZ\x90\x00" + b"\x00" * 64)
+    ctx = AnalysisContext(info=fileinfo.inspect(z1), content=z1.read_bytes())
+    titles = [f.title for f in ArchiveAnalyzer().analyze(ctx)]
+    assert any("wraps a single executable" in t for t in titles)
+    # Zip Slip path traversal + RTL spoof.
+    z2 = tmp_path / "b.zip"
+    with zipfile.ZipFile(z2, "w") as zf:
+        zf.writestr("../../etc/cron.d/x", b"data")
+        zf.writestr("photo‮gpj.exe", b"MZ")
+    ctx2 = AnalysisContext(info=fileinfo.inspect(z2), content=z2.read_bytes())
+    titles2 = [f.title for f in ArchiveAnalyzer().analyze(ctx2)]
+    assert any("Zip Slip" in t for t in titles2)
+    assert any("bidi" in t.lower() or "Bidirectional" in t for t in titles2)
