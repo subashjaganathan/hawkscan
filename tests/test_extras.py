@@ -102,3 +102,41 @@ def test_dotnet_capability_detection():
     clean = list(a._dotnet_capabilities(
         ["Program", "Main", "Console", "WriteLine"], "hello world"))
     assert not any(f.category in ("injection", "execution") for f in clean)
+
+
+def test_emulate_degrades_without_engines():
+    from hawkscan.analyzers.emulate import EmulateAnalyzer
+    ok = EmulateAnalyzer.is_available()
+    assert isinstance(ok, bool)
+    if not ok:
+        assert EmulateAnalyzer.unavailable_reason  # explains how to enable
+
+
+def test_emulate_floss_json_parser():
+    from hawkscan.analyzers.emulate import EmulateAnalyzer
+    # FLOSS v3-style JSON.
+    data = {"strings": {
+        "decoded_strings": [{"string": "http://evil-emu.com/gate"}],
+        "stack_strings": [{"string": "powershell -enc AAAA"}],
+        "tight_strings": ["cmd.exe /c whoami"],
+        "static_strings": [{"string": "ignored-static"}],
+    }}
+    got = EmulateAnalyzer._collect_floss_strings(data)
+    assert "http://evil-emu.com/gate" in got
+    assert "powershell -enc AAAA" in got
+    assert "cmd.exe /c whoami" in got
+    assert "ignored-static" not in got  # static set excluded
+
+
+def test_emulate_speakeasy_report_parsers():
+    from hawkscan.analyzers.emulate import EmulateAnalyzer
+    report = {"entry_points": [{
+        "apis": [{"api_name": "kernel32.WriteProcessMemory"},
+                 {"api_name": "wininet.InternetConnectA"}],
+        "network_events": {"dns": [{"query": "c2.example.bad"}],
+                           "traffic": [{"server": "45.77.88.99"}]},
+    }]}
+    apis = EmulateAnalyzer._report_apis(report)
+    assert "kernel32.WriteProcessMemory" in apis
+    hosts = EmulateAnalyzer._report_network(report)
+    assert "c2.example.bad" in hosts and "45.77.88.99" in hosts

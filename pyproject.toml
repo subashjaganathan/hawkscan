@@ -30,6 +30,10 @@ dynamic = [
     "psutil>=5.9",
     "frida>=16.0",
 ]
+emulate = [
+    "flare-floss>=3.0",
+    "speakeasy-emulator>=1.5",
+]
 
 [project.scripts]
 hawkscan = "hawkscan.cli:main"

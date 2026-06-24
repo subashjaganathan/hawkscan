@@ -23,6 +23,7 @@ from .pcap_analyzer import PcapAnalyzer
 from .android_analyzer import AndroidAnalyzer
 from .carver import Carver
 from .deobfuscate import DeobAnalyzer
+from .emulate import EmulateAnalyzer
 from .yara_analyzer import YaraAnalyzer
 
 # Order matters: StringsAnalyzer populates ctx.cache["strings"], which the
@@ -51,6 +52,7 @@ ALL_ANALYZERS: list[type[Analyzer]] = [
     AndroidAnalyzer,
     Carver,
     DeobAnalyzer,
+    EmulateAnalyzer,  # optional; skipped unless flare-floss / speakeasy installed
     YaraAnalyzer,
 ]
 

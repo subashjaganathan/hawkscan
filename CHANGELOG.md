@@ -8,6 +8,17 @@ The project version is pinned at 1.0.0; ongoing fine-tuning is tracked here
 rather than by bumping the version on each change.
 
 ### Added
+- **Emulation-based analysis (optional)** via new `emulate` analyzer:
+  - **FLARE FLOSS** integration recovers obfuscated strings (stack/tight/decoded)
+    that static extraction misses, then scans them for IOCs and behavioural
+    markers - so packed samples that hide C2/URLs/commands behind a string
+    decoder still get caught.
+  - **Speakeasy** integration emulates a PE's execution (API calls, file/
+    registry/network) WITHOUT running it natively - dynamic behaviour with no VM
+    and no EDR trigger.
+  - Both read the already-on-disk sample (nothing new written) and degrade
+    gracefully: the analyzer is skipped with a note when neither engine is
+    installed. Enable with `pip install hawkscan[emulate]`.
 - **New YARA rule pack `hawkscan_linux_threats.yar`** (4 original rules):
   Mirai/Gafgyt-class IoT botnet markers, Linux reverse/bind shell patterns,
   shell-history & system-log wiping (anti-forensics), and SSH-key / cron /

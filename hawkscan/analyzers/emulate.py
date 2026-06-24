@@ -1,0 +1,214 @@
+"""Emulation-based analysis (optional): FLARE FLOSS + Speakeasy.
+
+Two emulation engines, both optional and degrading gracefully when absent:
+
+  * FLOSS (flare-floss) - emulates the binary to recover *obfuscated* strings
+    (stack strings, tight strings, decoded strings) that plain extraction can
+    never see. The recovered strings are scanned for the same IOCs and
+    behavioural markers as static strings, so a packed sample that hides its
+    C2/URLs/commands behind a string decoder still gets caught.
+  * Speakeasy (speakeasy-emulator) - emulates a PE's execution in a sandboxed
+    CPU/OS model and reports the API calls, file/registry/network activity it
+    *would* perform - dynamic behaviour WITHOUT running the sample natively, so
+    no VM and no EDR trigger.
+
+Both read the sample that is already on disk (the user's own file); nothing new
+is written. The analyzer is skipped with a note when neither engine is
+installed (`pip install hawkscan[emulate]`).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+from typing import Iterable
+
+from .base import Analyzer, AnalysisContext
+from .strings_analyzer import _URL_RE, _IPV4_RE, _SUSPICIOUS_PATTERNS, _is_whitelisted
+from ..core.findings import Finding, Severity
+
+try:
+    import speakeasy  # type: ignore
+    _HAVE_SPEAKEASY = True
+except Exception:
+    _HAVE_SPEAKEASY = False
+
+_HAVE_FLOSS = shutil.which("floss") is not None
+_FLOSS_TIMEOUT = 180
+_MAX_EMULATE_SIZE = 32 * 1024 * 1024
+
+# Emulated API names that signal high-risk runtime behaviour.
+_RISKY_APIS = {
+    "URLDownloadToFileW": ("download", Severity.HIGH),
+    "URLDownloadToFileA": ("download", Severity.HIGH),
+    "InternetConnectA": ("network", Severity.MEDIUM),
+    "InternetConnectW": ("network", Severity.MEDIUM),
+    "WinHttpConnect": ("network", Severity.MEDIUM),
+    "WriteProcessMemory": ("injection", Severity.HIGH),
+    "CreateRemoteThread": ("injection", Severity.HIGH),
+    "VirtualAllocEx": ("injection", Severity.HIGH),
+    "CreateProcessA": ("execution", Severity.MEDIUM),
+    "CreateProcessW": ("execution", Severity.MEDIUM),
+    "ShellExecuteW": ("execution", Severity.MEDIUM),
+    "RegSetValueExW": ("persistence", Severity.MEDIUM),
+    "WinExec": ("execution", Severity.MEDIUM),
+}
+
+
+class EmulateAnalyzer(Analyzer):
+    name = "emulate"
+    unavailable_reason = ("install 'flare-floss' and/or 'speakeasy-emulator' "
+                          "for emulation-based analysis (pip install hawkscan[emulate])")
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return _HAVE_FLOSS or _HAVE_SPEAKEASY
+
+    def applies(self, ctx: AnalysisContext) -> bool:
+        # Emulation targets real on-disk PE files of a reasonable size. (In-memory
+        # nested scans use a sentinel path with no file, so they self-skip.)
+        return (ctx.info.file_type == "pe"
+                and os.path.isfile(ctx.info.path)
+                and ctx.info.size <= _MAX_EMULATE_SIZE)
+
+    def analyze(self, ctx: AnalysisContext) -> Iterable[Finding]:
+        if _HAVE_FLOSS:
+            yield from self._floss(ctx)
+        if _HAVE_SPEAKEASY:
+            yield from self._speakeasy(ctx)
+
+    # ---- FLOSS: recover obfuscated strings ------------------------------
+    def _floss(self, ctx: AnalysisContext) -> Iterable[Finding]:
+        try:
+            proc = subprocess.run(
+                ["floss", "--json", "--no", "static",
+                 str(ctx.info.path)],
+                capture_output=True, timeout=_FLOSS_TIMEOUT)
+            out = proc.stdout.decode("utf-8", "ignore")
+            start = out.find("{")
+            data = json.loads(out[start:]) if start != -1 else {}
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError, ValueError):
+            return
+
+        recovered = self._collect_floss_strings(data)
+        if not recovered:
+            return
+        ctx.cache["floss_strings"] = recovered[:5000]
+        blob = "\n".join(recovered)
+
+        yield Finding(
+            analyzer=self.name,
+            title=f"Emulation recovered {len(recovered)} obfuscated string(s)",
+            severity=Severity.MEDIUM if len(recovered) > 5 else Severity.LOW,
+            category="deobfuscation",
+            detail="FLOSS emulation decoded stack/tight/decoded strings hidden "
+                   "from static extraction.")
+
+        # Behavioural markers in the recovered (decoded) strings.
+        seen: set[str] = set()
+        for pattern, title, severity, category in _SUSPICIOUS_PATTERNS:
+            m = pattern.search(blob)
+            if m and title not in seen:
+                seen.add(title)
+                yield Finding(
+                    analyzer=self.name, title=f"{title} (decoded)",
+                    severity=severity, category=category,
+                    detail=f"Recovered via emulation: {m.group()[:80]!r}")
+
+        urls = sorted({u for u in _URL_RE.findall(blob)
+                       if not _is_whitelisted(u)})[:15]
+        ips = sorted({ip for ip in _IPV4_RE.findall(blob)
+                      if not ip.startswith(("0.", "127.", "255."))})[:15]
+        if urls or ips:
+            yield Finding(
+                analyzer=self.name, title="C2/IOCs recovered from obfuscated strings",
+                severity=Severity.HIGH, category="network",
+                detail="; ".join((urls + ips)[:10]),
+                data={"urls": urls, "ips": ips})
+
+    @staticmethod
+    def _collect_floss_strings(data) -> list[str]:
+        """Walk the FLOSS JSON (schema varies by version) for decoded/stack/
+        tight string values, skipping the static set we already cover."""
+        out: list[str] = []
+        strings = data.get("strings", data) if isinstance(data, dict) else {}
+        for key in ("decoded_strings", "stack_strings", "tight_strings"):
+            for item in (strings.get(key) or []):
+                if isinstance(item, dict):
+                    s = item.get("string") or item.get("value") or ""
+                elif isinstance(item, str):
+                    s = item
+                else:
+                    s = ""
+                if s and len(s) >= 4:
+                    out.append(s)
+        return out
+
+    # ---- Speakeasy: emulate runtime behaviour ---------------------------
+    def _speakeasy(self, ctx: AnalysisContext) -> Iterable[Finding]:
+        try:
+            se = speakeasy.Speakeasy()
+            module = se.load_module(str(ctx.info.path))
+            se.run_module(module)
+            report = se.get_report()
+        except Exception:
+            return  # emulation is best-effort; never sink the scan
+
+        apis = self._report_apis(report)
+        if not apis:
+            return
+        yield Finding(
+            analyzer=self.name,
+            title=f"Emulated execution: {len(apis)} API call(s) observed",
+            severity=Severity.INFO, category="dynamic",
+            detail="Speakeasy emulated the PE without native execution.")
+
+        fired: dict[str, Severity] = {}
+        for api in apis:
+            short = api.split(".")[-1]
+            if short in _RISKY_APIS:
+                cat, sev = _RISKY_APIS[short]
+                if fired.get(cat, Severity.INFO) < sev:
+                    fired[cat] = sev
+                yield Finding(
+                    analyzer=self.name,
+                    title=f"Emulated behaviour: {short} ({cat})",
+                    severity=sev, category=cat,
+                    detail="Observed during emulation (no native execution).")
+
+        # Network endpoints observed during emulation.
+        for host in self._report_network(report)[:15]:
+            yield Finding(
+                analyzer=self.name, title=f"Emulated network connection: {host}",
+                severity=Severity.HIGH, category="network",
+                detail="Connection attempt captured during emulation.",
+                data={"host": host})
+
+    @staticmethod
+    def _report_apis(report) -> list[str]:
+        apis: list[str] = []
+        try:
+            for ep in report.get("entry_points", []) or []:
+                for call in ep.get("apis", []) or []:
+                    name = call.get("api_name") if isinstance(call, dict) else None
+                    if name:
+                        apis.append(str(name))
+        except Exception:
+            return []
+        return apis
+
+    @staticmethod
+    def _report_network(report) -> list[str]:
+        hosts: set[str] = set()
+        try:
+            for ep in report.get("entry_points", []) or []:
+                net = (ep.get("network_events") or {})
+                for ev in (net.get("traffic") or []) + (net.get("dns") or []):
+                    h = ev.get("server") or ev.get("query") or ev.get("host")
+                    if h:
+                        hosts.add(str(h))
+        except Exception:
+            return []
+        return sorted(hosts)
