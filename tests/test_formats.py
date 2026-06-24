@@ -384,3 +384,28 @@ def test_macho_load_command_traits(tmp_path):
     assert any("RWX" in t for t in titles)
     assert any("Encrypted Mach-O" in t for t in titles)
     assert any("suspicious path" in t for t in titles)
+
+
+def test_email_phishing_body_analysis(tmp_path):
+    from hawkscan.analyzers.email_analyzer import EmailAnalyzer
+    eml = (b'From: "Support" <noreply@secure-x.com>\nTo: a@b.com\n'
+           b'Subject: verify\nContent-Type: text/html\n\n'
+           b'<html>Click <a href="http://10.0.0.9/login">www.paypal.com</a> '
+           b'and <a href="http://bit.ly/z">here</a> or http://evil.tk/p</html>')
+    ctx = _ctx(tmp_path, "p.eml", eml)
+    assert ctx.info.file_type == "email"
+    titles = [f.title for f in EmailAnalyzer().analyze(ctx)]
+    assert any("text/target mismatch" in t for t in titles)
+    assert any("IP-literal host" in t for t in titles)
+    assert any("shortener" in t for t in titles)
+
+
+def test_email_clean_no_phishing_fp(tmp_path):
+    from hawkscan.analyzers.email_analyzer import EmailAnalyzer
+    eml = (b'From: "Alice" <alice@example.com>\nTo: bob@example.com\n'
+           b'Subject: lunch\nContent-Type: text/plain\n\n'
+           b'See you at noon: https://example.com/menu')
+    ctx = _ctx(tmp_path, "c.eml", eml)
+    titles = [f.title for f in EmailAnalyzer().analyze(ctx)]
+    assert not any(f_cat in t.lower() for t in titles
+                   for f_cat in ("phishing", "spoofing", "mismatch"))

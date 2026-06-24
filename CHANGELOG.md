@@ -2,6 +2,15 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.20.0]
+
+### Added
+- **Email analyzer depth** (module improvement pass 9): body/phishing analysis -
+  hyperlink display-text vs href domain mismatch (the core phishing tell),
+  IP-literal-host links, IDN/punycode homograph URLs, URL shorteners,
+  suspicious-TLD links, display-name domain spoofing, archive-attachment
+  flagging, and body URL/IOC recovery.
+
 ## [1.19.0]
 
 ### Added
