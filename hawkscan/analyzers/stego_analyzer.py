@@ -9,21 +9,26 @@ focuses on the high-confidence cases: trailing data and polyglots.
 
 from __future__ import annotations
 
+import struct
 from typing import Iterable
 
 from .base import Analyzer, AnalysisContext
 from .entropy import shannon_entropy
 from ..core.findings import Finding, Severity
 
-# Second-type signatures that, embedded in an image, indicate a polyglot.
+# Second-type signatures that, embedded in an image, indicate a polyglot. Each
+# is >=4 bytes / specific text; a bare 2-byte "MZ" is NOT used because it occurs
+# by chance in normal image data (it caused a 100% false-positive rate). An
+# embedded PE is instead detected via its DOS-stub string below.
 _POLYGLOT = [
     (b"PK\x03\x04", "ZIP archive"),
-    (b"%PDF", "PDF document"),
-    (b"MZ", "PE executable"),
-    (b"\x7fELF", "ELF executable"),
+    (b"%PDF-", "PDF document"),
+    (b"\x7fELF\x01", "ELF executable"),
+    (b"\x7fELF\x02", "ELF executable"),
     (b"<?php", "PHP script"),
-    (b"<script", "HTML/JS"),
-    (b"#!/", "shell script"),
+    (b"#!/bin/", "shell script"),
+    (b"#!/usr/", "shell script"),
+    (b"This program cannot be run in DOS mode", "PE executable"),
 ]
 
 
@@ -38,6 +43,12 @@ def _logical_end(data: bytes) -> int | None:
     if data[:4] == b"GIF8":                   # GIF
         trailer = data.rfind(b"\x3b")
         return trailer + 1 if trailer != -1 else None
+    if data[:2] == b"BM" and len(data) >= 6:  # BMP: file size at offset 2
+        size = struct.unpack_from("<I", data, 2)[0]
+        return size if 0 < size <= len(data) else None
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP" and len(data) >= 8:
+        size = struct.unpack_from("<I", data, 4)[0] + 8  # RIFF size + 8-byte hdr
+        return size if 0 < size <= len(data) else None
     return None
 
 

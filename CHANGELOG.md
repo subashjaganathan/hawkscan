@@ -2,6 +2,17 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.26.0]
+
+### Fixed
+- **Stego polyglot false positive**: the polyglot scan matched a bare 2-byte
+  "MZ" anywhere in image data, flagging ~every JPEG as a "PE polyglot". PE
+  polyglots are now detected via the DOS-stub string and all signatures are
+  >=4 bytes/validated (0/20 clean images flagged, was 20/20).
+
+### Added
+- BMP and WEBP logical-end parsing for trailing-data/steganography detection.
+
 ## [1.25.0]
 
 ### Added

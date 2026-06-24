@@ -501,3 +501,23 @@ def test_binprofile_packer_detection(tmp_path):
     ctx2.cache["strings"] = ["Microsoft Visual C++", "kernel32.dll", "user32.dll"]
     assert not any("Packed/protected" in t.title
                    for t in BinProfileAnalyzer().analyze(ctx2))
+
+
+def test_stego_no_polyglot_fp_on_random_image_bytes(tmp_path):
+    # A JPEG with random body bytes containing a chance 'MZ' must NOT be flagged
+    # as a PE polyglot (the old 2-byte match false-positived on every image).
+    from hawkscan.analyzers.stego_analyzer import StegoAnalyzer
+    body = bytes((i * 73 + 0x4D) & 0xFF for i in range(4000))  # includes 'MZ' bytes
+    jpeg = b"\xff\xd8\xff\xe0" + body + b"\xff\xd9"
+    ctx = _ctx(tmp_path, "r.jpg", jpeg)
+    titles = [f.title for f in StegoAnalyzer().analyze(ctx)]
+    assert not any("PE executable" in t for t in titles)
+
+
+def test_stego_detects_pe_dos_stub_polyglot(tmp_path):
+    from hawkscan.analyzers.stego_analyzer import StegoAnalyzer
+    jpeg = (b"\xff\xd8\xff\xe0" + b"\x00" * 100 + b"MZ\x90\x00"
+            + b"This program cannot be run in DOS mode" + b"\x00" * 50 + b"\xff\xd9")
+    ctx = _ctx(tmp_path, "x.jpg", jpeg)
+    titles = [f.title for f in StegoAnalyzer().analyze(ctx)]
+    assert any("PE executable" in t for t in titles)
