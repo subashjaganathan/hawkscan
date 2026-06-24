@@ -2,6 +2,18 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.16.0]
+
+### Added
+- **Mach-O analyzer depth** (module improvement pass 5): real load-command
+  parsing - structural code-signature detection, encrypted segment
+  (LC_ENCRYPTION_INFO cryptid), RWX segments, linked dylibs and dylib loads
+  from world-writable/temp paths (dylib hijacking).
+
+### Fixed
+- Mach-O magic endianness mapping was inverted (only affected the byte-swapped
+  forms); corrected so load-command parsing reads the right byte order.
+
 ## [1.15.0]
 
 ### Added

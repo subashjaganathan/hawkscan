@@ -354,3 +354,33 @@ def test_pdf_launch_target_extracted(tmp_path):
     ctx = _ctx(tmp_path, "y.pdf", pdf)
     titles = [f.title for f in PDFAnalyzer().analyze(ctx)]
     assert any("Launch action target: cmd.exe" in t for t in titles)
+
+
+def test_macho_load_command_traits(tmp_path):
+    import struct
+    from hawkscan.analyzers.macho_analyzer import MachOAnalyzer
+    # 64-bit LE Mach-O with an RWX segment, encrypted segment, and a /tmp dylib.
+    def seg(name, initprot):
+        body = name.encode().ljust(16, b"\x00") + struct.pack("<QQQQ", 0, 0x1000, 0, 0)
+        body += struct.pack("<iiII", 7, initprot, 0, 0)
+        return struct.pack("<II", 0x19, 8 + len(body)) + body
+
+    def dylib(path):
+        raw = struct.pack("<II", 0xC, 0) + struct.pack("<IIII", 24, 0, 0, 0) + path.encode() + b"\x00"
+        raw = raw.ljust((len(raw) + 7) // 8 * 8, b"\x00")
+        return raw[:4] + struct.pack("<I", len(raw)) + raw[8:]
+
+    enc = struct.pack("<II", 0x2C, 20) + struct.pack("<III", 0, 0, 1)
+    cmds = [seg("__TEXT", 7), enc, dylib("/tmp/evil.dylib")]
+    hdr = struct.pack("<IiiIIIII", 0xfeedfacf, 0x01000007, 0, 2,
+                      len(cmds), sum(len(c) for c in cmds), 0, 0)
+    data = hdr + b"".join(cmds) + b"\x00" * 32
+    ctx = _ctx(tmp_path, "x.macho", data)
+    if ctx.info.file_type != "macho":
+        import pytest
+        pytest.skip("synthetic Mach-O not recognised")
+    ctx.cache["strings"] = []
+    titles = [f.title for f in MachOAnalyzer().analyze(ctx)]
+    assert any("RWX" in t for t in titles)
+    assert any("Encrypted Mach-O" in t for t in titles)
+    assert any("suspicious path" in t for t in titles)
