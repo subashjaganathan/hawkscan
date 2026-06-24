@@ -2,6 +2,17 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.17.0]
+
+### Added
+- **.NET analyzer depth** (module improvement pass 6): from the recovered CLR
+  symbol heap - obfuscator/protector fingerprinting (ConfuserEx, SmartAssembly,
+  Eazfuscator, Dotfuscator, .NET Reactor, Babel, etc.), managed->native
+  process-injection P/Invoke detection (>=2 native APIs, ATT&CK T1055),
+  embedded PowerShell host (System.Management.Automation, T1059.001), dynamic
+  native call via delegate (T1620), and symmetric-crypto API use. FP-tuned
+  against 120 real framework assemblies.
+
 ## [1.16.0]
 
 ### Added

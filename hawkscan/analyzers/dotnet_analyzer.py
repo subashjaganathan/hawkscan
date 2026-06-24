@@ -23,6 +23,31 @@ except Exception:
     _HAVE_PEFILE = False
 
 _URL_RE = re.compile(r"\b(?:https?|ftp)://[^\s\"'<>]{4,}", re.I)
+# Distinctive marker strings left by .NET obfuscators/protectors.
+_PROTECTORS = [
+    ("ConfusedByAttribute", "ConfuserEx"),
+    ("ConfuserEx", "ConfuserEx"),
+    ("Powered by SmartAssembly", "SmartAssembly"),
+    ("Eazfuscator.NET", "Eazfuscator.NET"),
+    ("DotfuscatorAttribute", "Dotfuscator"),
+    ("Babel Obfuscator", "Babel"),
+    ("NETGuard", "NETGuard"),
+    (".NET Reactor", ".NET Reactor"),
+    ("Agile.NET", "Agile.NET / CliSecure"),
+    ("CryptoObfuscator", "Crypto Obfuscator"),
+]
+# Native APIs reached via P/Invoke that, taken together, mean managed->native
+# process injection (these names only appear when explicitly DllImport-ed).
+_NATIVE_INJECT = {
+    "VirtualAlloc", "VirtualAllocEx", "CreateRemoteThread", "WriteProcessMemory",
+    "NtUnmapViewOfSection", "SetThreadContext", "QueueUserAPC", "ResumeThread",
+    "NtWriteVirtualMemory", "RtlCreateUserThread", "MapViewOfSection",
+}
+# Symmetric-crypto types (ransomware / config protection).
+_CRYPTO_TYPES = {
+    "RijndaelManaged", "AesManaged", "AesCryptoServiceProvider",
+    "TripleDESCryptoServiceProvider", "RNGCryptoServiceProvider",
+}
 _SUSPICIOUS = [
     (re.compile(r"powershell|cmd\.exe|Invoke-Expression|FromBase64String", re.I),
      "Command/exec string in IL", Severity.HIGH, "execution"),
@@ -91,6 +116,63 @@ class DotNetAnalyzer(Analyzer):
                               severity=Severity.MEDIUM, category="obfuscation",
                               detail="Most type/method names are 1-2 chars "
                                      "(ConfuserEx/Obfuscar-style renaming).")
+
+        yield from self._dotnet_capabilities(names, blob)
+
+    def _dotnet_capabilities(self, names, blob) -> Iterable[Finding]:
+        """Capability detection from the recovered symbol names + IL strings."""
+        nameset = set(names)
+        combined = blob + "\n" + "\n".join(names)
+
+        # Named obfuscator/protector.
+        low = combined.lower()
+        for marker, label in _PROTECTORS:
+            if marker.lower() in low:
+                yield Finding(
+                    analyzer=self.name, title=f"Protected with {label}",
+                    severity=Severity.MEDIUM, category="obfuscation",
+                    detail=f"Contains the {label} marker; commercial/known "
+                           "obfuscator-protector used to hinder analysis.")
+                break
+
+        # Managed -> native process injection via P/Invoke.
+        inject = _NATIVE_INJECT & nameset
+        if len(inject) >= 2:
+            yield Finding(
+                analyzer=self.name,
+                title=f"Native injection P/Invoke: {', '.join(sorted(inject)[:4])}",
+                severity=Severity.HIGH, category="injection",
+                detail="Managed code imports native memory/thread APIs for process "
+                       "injection. ATT&CK: T1055.")
+
+        # Dynamic native invocation via function-pointer delegates: a strong
+        # shellcode-runner / loader signal (rare in benign managed code; the
+        # looser Assembly.Load name pair was dropped as too noisy).
+        if "GetDelegateForFunctionPointer" in nameset:
+            yield Finding(
+                analyzer=self.name, title="Dynamic native call via delegate",
+                severity=Severity.LOW, category="injection",
+                detail="Uses Marshal.GetDelegateForFunctionPointer to call native "
+                       "code resolved at runtime (common in .NET shellcode runners "
+                       "and loaders). ATT&CK: T1620.")
+
+        # Hosts the PowerShell engine in-process (fileless execution).
+        if "System.Management.Automation" in combined:
+            yield Finding(
+                analyzer=self.name, title="Embedded PowerShell host",
+                severity=Severity.HIGH, category="execution",
+                detail="References System.Management.Automation; runs PowerShell "
+                       "in-process without spawning powershell.exe. ATT&CK: T1059.001.")
+
+        # Symmetric crypto (ransomware / config protection).
+        crypto = _CRYPTO_TYPES & nameset
+        if crypto:
+            yield Finding(
+                analyzer=self.name,
+                title=f"Symmetric crypto API ({sorted(crypto)[0]})",
+                severity=Severity.LOW, category="crypto",
+                detail="Uses managed symmetric encryption; seen in ransomware and "
+                       "for protecting C2 configuration.")
 
     # ---- metadata parsing ----------------------------------------------
     def _parse_metadata(self, pe, com):

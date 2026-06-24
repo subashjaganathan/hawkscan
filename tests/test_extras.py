@@ -83,3 +83,22 @@ def test_hashdb_loader(tmp_path, monkeypatch):
     loaded = engine._load_hashdb(db)
     assert loaded["a" * 64] == "EvilFamily"
     assert loaded["b" * 64] == "malicious"  # default label
+
+
+def test_dotnet_capability_detection():
+    from hawkscan.analyzers.dotnet_analyzer import DotNetAnalyzer
+    a = DotNetAnalyzer()
+    # Native-injection P/Invoke (>=2 APIs) + embedded PowerShell host.
+    fnds = list(a._dotnet_capabilities(
+        ["VirtualAllocEx", "CreateRemoteThread", "WriteProcessMemory"],
+        "System.Management.Automation"))
+    titles = [f.title for f in fnds]
+    assert any("Native injection P/Invoke" in t for t in titles)
+    assert any("Embedded PowerShell host" in t for t in titles)
+    # Known protector marker.
+    prot = list(a._dotnet_capabilities(["x"], "ConfusedByAttribute"))
+    assert any("ConfuserEx" in f.title for f in prot)
+    # Clean symbol set must not raise injection/exec findings.
+    clean = list(a._dotnet_capabilities(
+        ["Program", "Main", "Console", "WriteLine"], "hello world"))
+    assert not any(f.category in ("injection", "execution") for f in clean)
