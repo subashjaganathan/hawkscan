@@ -69,7 +69,28 @@ _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern, str, Severity, str]] = [
      "Tor hidden-service (.onion) reference", Severity.MEDIUM, "network"),
     (re.compile(r"\bkeylog(?:ger|ging)?\b", re.I),
      "Keylogging reference", Severity.MEDIUM, "spyware"),
+    (re.compile(r"Set-MpPreference\s+-Disable|Add-MpPreference\s+-Exclusion|"
+                r"DisableRealtimeMonitoring", re.I),
+     "Microsoft Defender tampering", Severity.HIGH, "evasion"),
+    (re.compile(r"\bwevtutil\s+cl\b|Clear-EventLog", re.I),
+     "Event-log clearing (anti-forensics)", Severity.HIGH, "evasion"),
+    (re.compile(r"AmsiScanBuffer|amsiInitFailed|AmsiUtils", re.I),
+     "AMSI bypass reference", Severity.HIGH, "evasion"),
+    (re.compile(r"\b(?:fodhelper|eventvwr\.exe|computerdefaults|sdclt\.exe)\b", re.I),
+     "UAC-bypass LOLBin reference", Severity.MEDIUM, "privilege"),
+    (re.compile(r"net\s+(?:user\s+\S+\s+\S+\s+/add|localgroup\s+administrat\w*"
+                r"[^\n]{0,30}/add)", re.I),
+     "Local account / admin-group manipulation", Severity.MEDIUM, "persistence"),
+    (re.compile(r"certutil\b[^\n]{0,40}(?:-urlcache|-decode|-encode)", re.I),
+     "certutil download/decode abuse (LOLBin)", Severity.HIGH, "execution"),
+    # Crypto-wallet addresses (ransomware notes / clipboard-stealer targets).
+    (re.compile(r"\b0x[0-9a-fA-F]{40}\b"),
+     "Possible Ethereum address", Severity.MEDIUM, "ransomware"),
+    (re.compile(r"\b4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b"),
+     "Possible Monero address", Severity.MEDIUM, "ransomware"),
 ]
+
+_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 
 
 def extract_strings(data: bytes, min_len: int = 4, limit: int = 200_000):
@@ -170,3 +191,12 @@ class StringsAnalyzer(Analyzer):
             yield Finding(analyzer=self.name, title="PDB path(s) present",
                           severity=Severity.INFO, category="attribution",
                           detail="; ".join(pdbs), data={"pdb_paths": pdbs})
+
+        # Email addresses (exfil/contact IOCs); drop obvious placeholders.
+        emails = sorted({e for e in _EMAIL_RE.findall(blob)
+                         if not e.lower().endswith((".png", ".jpg", ".gif", ".dll"))
+                         and "example.com" not in e.lower()})[:15]
+        if emails:
+            yield Finding(analyzer=self.name, title=f"{len(emails)} email address(es)",
+                          severity=Severity.INFO, category="ioc",
+                          detail="; ".join(emails[:8]), data={"emails": emails})
