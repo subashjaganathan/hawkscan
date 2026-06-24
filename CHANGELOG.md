@@ -2,6 +2,22 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.0.0] (rolling)
+
+The project version is pinned at 1.0.0; ongoing fine-tuning is tracked here
+rather than by bumping the version on each change.
+
+### Added
+- **New YARA rule pack `hawkscan_linux_threats.yar`** (4 original rules):
+  Mirai/Gafgyt-class IoT botnet markers, Linux reverse/bind shell patterns,
+  shell-history & system-log wiping (anti-forensics), and SSH-key / cron /
+  systemd persistence implants. Conservative multi-indicator conditions,
+  verified not to match benign busybox firmware or admin scripts.
+  (91 bundled rules across 14 packs.)
+
+<!-- History below was released under incrementing version tags before the
+     version was pinned at 1.0.0. -->
+
 ## [1.31.0]
 
 ### Added
