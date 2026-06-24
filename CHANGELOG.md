@@ -2,6 +2,19 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.13.0]
+
+### Added
+- **Office/maldoc analyzer depth** (module improvement pass 2): OOXML
+  structural analysis with no macro source needed - remote template injection
+  (T1221), external OLE-object relationships, DDE/DDEAUTO field execution
+  (T1559.002), Excel 4.0/XLM macro sheets, and embedded OLE objects (payload
+  detection). Richer VBA analysis via olevba analyze_macros (auto-exec /
+  suspicious / IOC / obfuscation categories), VBA stomping detection
+  (T1564.007), and recovered macro IOCs. OLE Ole10Native embedded-filename
+  extraction. Relationship Type filtering keeps benign hyperlinks from
+  false-positiving.
+
 ## [1.12.0]
 
 ### Added

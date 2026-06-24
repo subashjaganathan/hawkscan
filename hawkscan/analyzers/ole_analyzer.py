@@ -107,7 +107,38 @@ class OleAnalyzer(Analyzer):
                     title=f"Embedded object stream ({marker})",
                     severity=sev, category="dropper",
                     detail="OLE stream carries an embedded/launchable object.")
+
+        # Ole10Native packages store the original filename/path of the embedded
+        # object; recovering it reveals the dropped payload's name and type.
+        for s in streams:
+            if s.lower().endswith("ole10native") or s.lower() == "\x01ole10native":
+                yield from self._ole10native(self._read(ole, s))
+                break
         if any("macros" in s or "vba" in s for s in low):
             yield Finding(analyzer=self.name, title="VBA macro storage present",
                           severity=Severity.MEDIUM, category="macro",
                           detail="Legacy document contains a macro project.")
+
+    def _ole10native(self, data: bytes) -> Iterable[Finding]:
+        # Layout: DWORD totalsize, WORD flags, then NUL-terminated ANSI label and
+        # source path, a DWORD, NUL-terminated temp path, then DWORD payload size
+        # + payload. We only need the label/path to name the dropped object.
+        if len(data) < 8:
+            return
+        try:
+            parts = data[6:].split(b"\x00")
+            label = parts[0].decode("latin1", "ignore") if parts else ""
+        except Exception:
+            label = ""
+        if not label:
+            return
+        low = label.lower()
+        risky = any(low.endswith(e) for e in _RISKY_EXTS)
+        yield Finding(
+            analyzer=self.name,
+            title=f"Embedded packaged file: {label}",
+            severity=Severity.HIGH if risky else Severity.MEDIUM,
+            category="dropper",
+            detail=("Embedded object is an executable/script - double-click runs it."
+                    if risky else "OLE Package embeds a file object."),
+            data={"embedded_name": label})
