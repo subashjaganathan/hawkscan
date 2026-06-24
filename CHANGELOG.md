@@ -2,6 +2,19 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.11.0]
+
+### Added
+- **Deep script analyzer**: deobfuscates PowerShell (-EncodedCommand,
+  FromBase64String, [char]-code joins), JS/VBS, then matches an original
+  ATT&CK-mapped behaviour database (download cradles, dynamic exec,
+  AMSI/ETW/Defender evasion, persistence, process injection, credential
+  access, discovery, anti-analysis). Emits a kill-chain "behaviour chain"
+  finding and recovers embedded C2 IOCs.
+- **Stronger deobfuscation engine**: Dean-Edwards eval() packer unrolling,
+  obfuscator.io string-array decode (non-rotated), fromCharCode with hex and
+  integer arithmetic, and single eval('literal') wrapper peeling.
+
 ## [1.10.0]
 
 ### Added
