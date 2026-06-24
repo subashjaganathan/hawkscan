@@ -2,6 +2,15 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.22.0]
+
+### Added
+- **LNK analyzer depth** (module improvement pass 11): structured StringData
+  parsing recovers the exact COMMAND_LINE_ARGUMENTS, relative path and icon
+  location (instead of guessing from loose strings); icon-spoofing detection
+  (document/media icon over a shell-launching target); and appended-payload
+  detection (large trailing data beyond the shortcut structures).
+
 ## [1.21.0]
 
 ### Added

