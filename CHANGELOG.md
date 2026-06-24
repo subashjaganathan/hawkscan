@@ -2,6 +2,16 @@
 
 All notable changes to HawkScan are documented here.
 
+## [1.21.0]
+
+### Added
+- **PCAP analyzer depth** (module improvement pass 10): TLS ClientHello SNI
+  extraction (HTTPS C2 destinations are now visible, not just port-80 hosts),
+  HTTP User-Agent and request-URI extraction with non-browser-UA and C2-style
+  URI flags, DNS-tunnelling detection (many long subdomains under one parent),
+  and basic PCAPNG parsing (Section/Interface/Enhanced-Packet blocks) instead
+  of skipping the format entirely.
+
 ## [1.20.0]
 
 ### Added

@@ -409,3 +409,31 @@ def test_email_clean_no_phishing_fp(tmp_path):
     titles = [f.title for f in EmailAnalyzer().analyze(ctx)]
     assert not any(f_cat in t.lower() for t in titles
                    for f_cat in ("phishing", "spoofing", "mismatch"))
+
+
+def test_pcap_tls_sni_extraction(tmp_path):
+    import struct
+    from hawkscan.analyzers.pcap_analyzer import PcapAnalyzer
+
+    def client_hello(host):
+        hb = host.encode()
+        sni = (b"\x00\x00" + struct.pack(">H", len(hb) + 5)
+               + struct.pack(">H", len(hb) + 3) + b"\x00"
+               + struct.pack(">H", len(hb)) + hb)
+        body = (b"\x03\x03" + b"\x00" * 32 + b"\x00" + b"\x00\x02\x00\x2f"
+                + b"\x01\x00" + struct.pack(">H", len(sni)) + sni)
+        hs = b"\x01" + struct.pack(">I", len(body))[1:] + body
+        return b"\x16\x03\x01" + struct.pack(">H", len(hs)) + hs
+
+    payload = client_hello("evil-tls-c2.xyz")
+    tcp = struct.pack(">HHIIBBHHH", 55000, 443, 0, 0, 0x50, 0x18, 0, 0, 0) + payload
+    ip = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 20 + len(tcp), 1, 0, 64, 6, 0,
+                     bytes([10, 0, 0, 5]), bytes([45, 77, 88, 99]))
+    pkt = b"\xaa" * 6 + b"\xbb" * 6 + b"\x08\x00" + ip + tcp
+    gh = b"\xd4\xc3\xb2\xa1" + struct.pack("<HHIIII", 2, 4, 0, 0, 65535, 1)
+    data = gh + struct.pack("<IIII", 1000, 0, len(pkt), len(pkt)) + pkt
+    ctx = _ctx(tmp_path, "t.pcap", data)
+    fnds = list(PcapAnalyzer().analyze(ctx))
+    assert any("TLS SNI" in f.title for f in fnds)
+    assert any("evil-tls-c2.xyz" in f.data.get("sni", []) for f in fnds
+               if f.data.get("sni"))
