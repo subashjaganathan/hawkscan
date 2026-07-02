@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure HawkScan detection accuracy against a labelled sample corpus.
+"""Measure Hawk Malware Scan detection accuracy against a labelled sample corpus.
 
 Point it at a directory of known-malicious files and a directory of known-benign
 files; it scans each, treats any verdict at/above the threshold as "flagged
@@ -22,8 +22,8 @@ from pathlib import Path
 # Allow running from the repo root without installing.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from hawkscan.core.engine import Engine          # noqa: E402
-from hawkscan.core.findings import Verdict        # noqa: E402
+from hawk_malware_scan.core.engine import Engine          # noqa: E402
+from hawk_malware_scan.core.findings import Verdict        # noqa: E402
 
 
 def _iter_files(d: Path):
@@ -67,7 +67,7 @@ def run(malicious: Path, benign: Path, threshold: Verdict, rules: Path | None):
     f1 = (2 * precision * recall / (precision + recall)
           if (precision + recall) else 0.0)
 
-    print(f"\nHawkScan benchmark (threshold >= {threshold.label})")
+    print(f"\nHawk Malware Scan benchmark (threshold >= {threshold.label})")
     print("-" * 48)
     print(f"  malicious scanned : {tp + fn}")
     print(f"  benign scanned    : {tn + fp}")
@@ -94,7 +94,7 @@ def run(malicious: Path, benign: Path, threshold: Verdict, rules: Path | None):
 
 
 def main():
-    p = argparse.ArgumentParser(description="HawkScan accuracy benchmark.")
+    p = argparse.ArgumentParser(description="Hawk Malware Scan accuracy benchmark.")
     p.add_argument("--malicious", type=Path, help="Directory of known-bad samples.")
     p.add_argument("--benign", type=Path, help="Directory of known-good files.")
     p.add_argument("--threshold", default="suspicious",

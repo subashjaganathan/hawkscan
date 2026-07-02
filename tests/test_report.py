@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from hawkscan.core.engine import Engine
-from hawkscan import report, report_html
+from hawk_malware_scan.core.engine import Engine
+from hawk_malware_scan import report, report_html
 
 
 def test_html_report_is_self_contained(tmp_path):
@@ -13,7 +13,7 @@ def test_html_report_is_self_contained(tmp_path):
 
     out = report_html.render_html([res])
     assert out.startswith("<!doctype html>")
-    assert "HawkScan Report" in out
+    assert "Hawk Malware Scan Report" in out
     assert res.verdict.label.upper() in out
     # No external assets or network references.
     assert "http://" not in out and "https://" not in out

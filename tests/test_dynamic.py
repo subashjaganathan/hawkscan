@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hawkscan.dynamic import sandbox, SANDBOX_ENV_FLAG
+from hawk_malware_scan.dynamic import sandbox, SANDBOX_ENV_FLAG
 
 
 def test_refuses_without_sandbox_env(tmp_path, monkeypatch):
@@ -17,7 +17,7 @@ def test_refuses_without_sandbox_env(tmp_path, monkeypatch):
     sample.write_text("Write-Host hi")
     res = sandbox.run_sample(sample, "script", allow_detonate=True)
     assert res.ran is False
-    assert "HAWKSCAN_SANDBOX" in res.skipped_reason
+    assert "HAWK_MALWARE_SCAN_SANDBOX" in res.skipped_reason
 
 
 def test_refuses_without_detonate_flag(tmp_path, monkeypatch):
@@ -52,7 +52,7 @@ def test_method_resolution():
 
 
 def test_tracers_expose_availability():
-    from hawkscan.dynamic import strace_tracer, frida_tracer, adb_tracer
+    from hawk_malware_scan.dynamic import strace_tracer, frida_tracer, adb_tracer
     # available() must be callable and return a bool without side effects.
     assert isinstance(strace_tracer.available(), bool)
     assert isinstance(frida_tracer.available(), bool)
@@ -63,7 +63,7 @@ def test_runtime_apis_map_to_attack():
     # Captured runtime API calls should categorise into capabilities + ATT&CK,
     # exactly like static analysis (no execution needed for this mapping).
     import types
-    from hawkscan.cli import _runtime_attack
+    from hawk_malware_scan.cli import _runtime_attack
     res = types.SimpleNamespace(mitre={})
     sb = types.SimpleNamespace(api_calls=["VirtualAllocEx x1",
                                           "WriteProcessMemory x2",
@@ -76,7 +76,7 @@ def test_runtime_apis_map_to_attack():
 
 def test_frida_trace_reports_missing_dependency_cleanly():
     # With frida absent, trace() returns a note rather than raising.
-    from hawkscan.dynamic import frida_tracer
+    from hawk_malware_scan.dynamic import frida_tracer
     if not frida_tracer.available():
         out = frida_tracer.trace(["whatever"], timeout=1)
         assert out["notes"] and "frida" in out["notes"][0].lower()

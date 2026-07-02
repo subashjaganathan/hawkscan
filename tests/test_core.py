@@ -6,9 +6,9 @@ import hashlib
 
 import pytest
 
-from hawkscan.core import fileinfo
-from hawkscan.core.engine import Engine, CATEGORY_SCORE_CAP
-from hawkscan.core.findings import Verdict, Severity, score_to_verdict
+from hawk_malware_scan.core import fileinfo
+from hawk_malware_scan.core.engine import Engine, CATEGORY_SCORE_CAP
+from hawk_malware_scan.core.findings import Verdict, Severity, score_to_verdict
 
 
 # ---- type detection -----------------------------------------------------
@@ -90,7 +90,7 @@ def test_oversized_file_skips_deep_analysis(tmp_path):
 
 
 def test_category_cap_limits_runaway_score():
-    from hawkscan.core.findings import Finding
+    from hawk_malware_scan.core.findings import Finding
     # 10 high (50) findings of one category = raw 500, capped to CATEGORY_SCORE_CAP.
     findings = [Finding(analyzer="x", title=f"f{i}", severity=Severity.HIGH,
                         category="execution") for i in range(10)]
@@ -111,7 +111,7 @@ def test_denylist_forces_malicious(tmp_path):
 
 
 def test_parallel_scan_preserves_order(tmp_path):
-    from hawkscan.cli import _scan_files
+    from hawk_malware_scan.cli import _scan_files
     files = []
     for i in range(6):
         p = tmp_path / f"f{i}.txt"
@@ -123,7 +123,7 @@ def test_parallel_scan_preserves_order(tmp_path):
 
 
 def test_dedup_drops_identical_findings():
-    from hawkscan.core.findings import Finding
+    from hawk_malware_scan.core.findings import Finding
     a = Finding(analyzer="x", title="same", severity=Severity.HIGH, category="c")
     b = Finding(analyzer="x", title="same", severity=Severity.HIGH, category="c")
     out = Engine._dedup([a, b])

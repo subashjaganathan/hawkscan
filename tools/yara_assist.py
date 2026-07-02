@@ -70,7 +70,7 @@ def main() -> int:
     p.add_argument("--name", default="Suspicious_Family_VariantA")
     args = p.parse_args()
 
-    from hawkscan.core import fileinfo
+    from hawk_malware_scan.core import fileinfo
     data = args.sample.read_bytes()
     info = fileinfo.inspect(args.sample)
     is_pe = info.file_type == "pe"

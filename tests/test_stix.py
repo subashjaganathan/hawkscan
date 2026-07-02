@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from hawkscan.core.engine import Engine
-from hawkscan import stix
+from hawk_malware_scan.core.engine import Engine
+from hawk_malware_scan import stix
 
 
 def test_stix_bundle_has_file_and_indicators(tmp_path):

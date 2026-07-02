@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import zipfile
 
-from hawkscan.core import fileinfo
-from hawkscan.analyzers.base import AnalysisContext
-from hawkscan.analyzers.android_analyzer import AndroidAnalyzer
+from hawk_malware_scan.core import fileinfo
+from hawk_malware_scan.analyzers.base import AnalysisContext
+from hawk_malware_scan.analyzers.android_analyzer import AndroidAnalyzer
 
 
 def _build_apk(path):

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from hawkscan.core import fileinfo
-from hawkscan.analyzers.base import AnalysisContext
-from hawkscan.analyzers.entropy import shannon_entropy, EntropyAnalyzer
-from hawkscan.analyzers.strings_analyzer import StringsAnalyzer, extract_strings
-from hawkscan.analyzers.script_analyzer import ScriptAnalyzer
-from hawkscan.analyzers.pdf_analyzer import PDFAnalyzer
-from hawkscan.analyzers.archive_analyzer import ArchiveAnalyzer
-from hawkscan.core.findings import Severity
+from hawk_malware_scan.core import fileinfo
+from hawk_malware_scan.analyzers.base import AnalysisContext
+from hawk_malware_scan.analyzers.entropy import shannon_entropy, EntropyAnalyzer
+from hawk_malware_scan.analyzers.strings_analyzer import StringsAnalyzer, extract_strings
+from hawk_malware_scan.analyzers.script_analyzer import ScriptAnalyzer
+from hawk_malware_scan.analyzers.pdf_analyzer import PDFAnalyzer
+from hawk_malware_scan.analyzers.archive_analyzer import ArchiveAnalyzer
+from hawk_malware_scan.core.findings import Severity
 
 
 def _ctx(tmp_path, name: str, data: bytes) -> AnalysisContext:

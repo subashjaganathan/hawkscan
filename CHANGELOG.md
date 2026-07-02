@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to HawkScan are documented here.
+All notable changes to Hawk Malware Scan are documented here.
 
 ## [1.0.0] (rolling)
 
@@ -18,8 +18,8 @@ rather than by bumping the version on each change.
     and no EDR trigger.
   - Both read the already-on-disk sample (nothing new written) and degrade
     gracefully: the analyzer is skipped with a note when neither engine is
-    installed. Enable with `pip install hawkscan[emulate]`.
-- **New YARA rule pack `hawkscan_linux_threats.yar`** (4 original rules):
+    installed. Enable with `pip install hawk-malware-scan[emulate]`.
+- **New YARA rule pack `hawk-malware-scan_linux_threats.yar`** (4 original rules):
   Mirai/Gafgyt-class IoT botnet markers, Linux reverse/bind shell patterns,
   shell-history & system-log wiping (anti-forensics), and SSH-key / cron /
   systemd persistence implants. Conservative multi-indicator conditions,
@@ -32,7 +32,7 @@ rather than by bumping the version on each change.
 ## [1.31.0]
 
 ### Added
-- **New YARA rule pack `hawkscan_ransomware.yar`** (4 original rules, 83 -> 87
+- **New YARA rule pack `hawk-malware-scan_ransomware.yar`** (4 original rules, 83 -> 87
   bundled): recovery-tampering command chains (vssadmin/bcdedit/wbadmin),
   family-specific ransom-note artifacts (WannaCry/LockBit/Ryuk/Conti/REvil/
   Hive/Maze/BlackCat/Phobos), encryption-behaviour combination (crypto API +
@@ -42,7 +42,7 @@ rather than by bumping the version on each change.
 ## [1.30.0]
 
 ### Added
-- **New YARA rule pack `hawkscan_stealers.yar`** (6 original rules, 77 -> 83
+- **New YARA rule pack `hawk-malware-scan_stealers.yar`** (6 original rules, 77 -> 83
   bundled): browser-credential infostealer (browser stores + wallet/exfil),
   clipboard crypto-clipper (clipboard APIs + hardcoded wallet address),
   in-memory shellcode loader (process-injection API triad in a PE), Cobalt
@@ -64,7 +64,7 @@ rather than by bumping the version on each change.
 ### Changed
 - **EDR-friendly in-memory analysis**: nested re-scans of recovered payloads
   (deobfuscated stages and archive members) now run entirely in memory via the
-  new Engine.scan_bytes() / fileinfo.inspect_bytes(). HawkScan no longer writes
+  new Engine.scan_bytes() / fileinfo.inspect_bytes(). Hawk Malware Scan no longer writes
   the recovered (often malicious) payload to a temp file during a normal scan,
   so an on-access EDR such as CrowdStrike Falcon cannot quarantine it and abort
   the scan. Detection of the nested payload is unchanged. (Explicit --extract
@@ -313,7 +313,7 @@ rather than by bumping the version on each change.
   network and crypto/anti-analysis (was ~13).
 
 Note: live dynamic execution must be validated in a disposable VM
-(HAWKSCAN_SANDBOX=1 + --detonate); the runtime-to-ATT&CK mapping is unit-tested,
+(HAWK_MALWARE_SCAN_SANDBOX=1 + --detonate); the runtime-to-ATT&CK mapping is unit-tested,
 the hooking itself is exercised in the VM.
 
 ## [1.5.0]
@@ -344,7 +344,7 @@ the hooking itself is exercised in the VM.
 ## [1.4.0]
 
 ### Added
-- **Attack-technique rule pack** (`hawkscan_attack.yar`): exploitation strings
+- **Attack-technique rule pack** (`hawk-malware-scan_attack.yar`): exploitation strings
   (Log4Shell, ProxyShell/ProxyLogon, Spring4Shell, PrintNightmare), extended
   living-off-the-land binary abuse, credential access (SAM/NTDS dump, vault,
   LaZagne), defense evasion / anti-forensics (event-log clearing, AV/firewall
@@ -402,7 +402,7 @@ the hooking itself is exercised in the VM.
   path-traversal write outside the temporary directory.
 
 ### Added
-- Tunable configuration via `hawkscan.toml` / `~/.hawkscan/config.toml`
+- Tunable configuration via `hawk-malware-scan.toml` / `~/.hawk-malware-scan/config.toml`
   (verdict thresholds and per-category score cap); defaults unchanged.
 
 ### Changed
@@ -478,7 +478,7 @@ this release marks the API and behaviour as stable.
 - **VirusTotal enrichment** (`--vt`): opt-in reputation lookup by SHA-256 hash
   only (the file is never uploaded). Gated on VT_API_KEY; stdlib urllib, no new
   dependency. Detections fold into the verdict. This was the last unimplemented
-  function from the reference tool's flag set; HawkScan now covers them all.
+  function from the reference tool's flag set; Hawk Malware Scan now covers them all.
 
 ## [0.4.0]
 
@@ -508,7 +508,7 @@ this release marks the API and behaviour as stable.
 ## [0.3.0]
 
 ### Added
-- Offline known-bad **hash denylist** (`~/.hawkscan/denylist.txt`) that forces a
+- Offline known-bad **hash denylist** (`~/.hawk-malware-scan/denylist.txt`) that forces a
   Malicious verdict, complementing the existing known-good allowlist.
 - **Parallel folder scanning** (`--jobs`, auto by default) for static scans;
   dynamic analysis remains sequential for safety.

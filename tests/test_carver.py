@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import struct
 
-from hawkscan.core import fileinfo
-from hawkscan.analyzers.base import AnalysisContext
-from hawkscan.analyzers.carver import Carver, _pe_size, _validate_pe
+from hawk_malware_scan.core import fileinfo
+from hawk_malware_scan.analyzers.base import AnalysisContext
+from hawk_malware_scan.analyzers.carver import Carver, _pe_size, _validate_pe
 
 
 def _min_pe() -> bytes:

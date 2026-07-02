@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hawkscan"
+name = "hawk-malware-scan"
 version = "1.0.0"
 description = "Offline, explainable malware scanner for any file on any OS."
 readme = "README.md"
@@ -13,7 +13,7 @@ license = { text = "MIT" }
 keywords = ["malware", "dfir", "security", "scanner", "yara"]
 
 # Core engine has ZERO required dependencies. Optional analyzers light up when
-# these are present; install with `pip install hawkscan[full]`.
+# these are present; install with `pip install hawk-malware-scan[full]`.
 dependencies = []
 
 [project.optional-dependencies]
@@ -36,10 +36,10 @@ emulate = [
 ]
 
 [project.scripts]
-hawkscan = "hawkscan.cli:main"
+hawk-malware-scan = "hawk_malware_scan.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["hawkscan*"]
+include = ["hawk_malware_scan*"]
 
 [tool.setuptools.package-data]
-hawkscan = ["rules/*.yar", "rules/*.yara"]
+hawk_malware_scan = ["rules/*.yar", "rules/*.yara"]

@@ -9,13 +9,13 @@ dist/
 venv/
 env/
 
-# HawkScan test samples (contain EICAR / crafted binaries — would trip AV
+# Hawk Malware Scan test samples (contain EICAR / crafted binaries — would trip AV
 # and GitHub malware scanning if committed). Regenerate locally as needed.
 samples/
 
 # Downloaded community rulesets live in the per-user cache, never in-repo.
-hawkscan/rules/yara-forge-*
-hawkscan/rules/yara-rules-*
+hawk_malware_scan/rules/yara-forge-*
+hawk_malware_scan/rules/yara-rules-*
 
 # OS / editor
 .DS_Store
